@@ -1,4 +1,4 @@
-# Captain WHILL
+# WHILL Nav2 Bringup
 
 WHILLをROS 2 Humbleで制御し，Ouster LiDAR，FAST-LIO2，Nav2を組み合わせて自律走行を行うための起動手順である．
 
