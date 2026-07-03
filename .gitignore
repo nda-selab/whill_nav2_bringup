@@ -1,0 +1,16 @@
+build/
+install/
+log/
+__pycache__/
+*.pyc
+*.bag
+*.db3
+*.pcd
+*.ply
+*.bin
+*.log
+frames_*.pdf
+frames_*.gv
+.vscode/
+.idea/
+.DS_Store
