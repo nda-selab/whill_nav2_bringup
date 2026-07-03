@@ -6,6 +6,20 @@ WHILLをROS 2 Humbleで制御し，Ouster LiDAR，FAST-LIO2，Nav2を組み合�
 Nav2の`controller_server`から出力される速度指令`/cmd_vel_nav`を`velocity_smoother`で平滑化し，`/cmd_vel`として出力する．
 さらに，`topic_tools relay`により`/cmd_vel`をWHILLの制御トピック`/whill/controller/cmd_vel`へ転送することで，WHILLの自律走行を行う．
 
+## Dependency
+
+### WHILL ROS 2 driver
+
+https://github.com/whill-labs/ros2_whill
+
+### Ouster ROS 2 driver
+
+https://github.com/ouster-lidar/ouster-ros/tree/ros2
+
+### FAST-LIO2 ROS 2
+
+https://github.com/Ericsii/FAST_LIO_ROS2
+
 ## System Overview
 
 ```text
