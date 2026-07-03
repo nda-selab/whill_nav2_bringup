@@ -8,17 +8,29 @@ Nav2の`controller_server`から出力される速度指令`/cmd_vel_nav`を`vel
 
 ## Dependencies
 
+### ROS 2 packages
+
+```bash
+sudo apt install \
+  ros-humble-navigation2 \
+  ros-humble-nav2-bringup \
+  ros-humble-pointcloud-to-laserscan \
+  ros-humble-topic-tools \
+  ros-humble-joy \
+  ros-humble-tf2-tools
+```
+
 ### WHILL ROS 2 driver
 
-https://github.com/whill-labs/ros2_whill
+- https://github.com/whill-labs/ros2_whill
 
 ### Ouster ROS 2 driver
 
-https://github.com/ouster-lidar/ouster-ros/tree/ros2
+- https://github.com/ouster-lidar/ouster-ros/tree/ros2
 
 ### FAST-LIO2 ROS 2
 
-https://github.com/Ericsii/FAST_LIO_ROS2
+- https://github.com/Ericsii/FAST_LIO_ROS2
 
 ## System Overview
 
@@ -391,41 +403,22 @@ ros2 launch fast_lio mapping.launch.py
 
 ### Tab 3: Static TF
 
-`body -> os_sensor`を配信する．
+`body -> os_sensor`および`body -> base_link`を配信する．
 
 ```bash
 source /opt/ros/humble/setup.bash
 source ~/ros2_ws/install/setup.bash
 
-ros2 run tf2_ros static_transform_publisher \
- --x -0.10 \
- --y 0.00 \
- --z 1.20 \
- --roll 0.0 \
- --pitch 0.0 \
- --yaw 0.0 \
- --frame-id body \
- --child-frame-id os_sensor
+ros2 launch whill_nav2_bringup static_tf.launch.py
 ```
 
-別ターミナルで`body -> base_link`を配信する．
+このlaunchでは，以下の2つの静的TFを配信する．
 
-```bash
-source /opt/ros/humble/setup.bash
-source ~/ros2_ws/install/setup.bash
+- `body -> os_sensor`
+- `body -> base_link`
 
-ros2 run tf2_ros static_transform_publisher \
- --x 0.0 \
- --y 0.0 \
- --z 0.0 \
- --roll 0.0 \
- --pitch 0.0 \
- --yaw 3.14159265359 \
- --frame-id body \
- --child-frame-id base_link
-```
-
-`static_transform_publisher` は実行後に終了せず，TFを配信し続ける．そのため，表示が止まったように見えても正常であり，自律走行中は起動したままにする．
+`static_transform_publisher` は実行後に終了せず，TFを配信し続ける．
+そのため，表示が止まったように見えても正常であり，自律走行中は起動したままにする．
 これらはlaunchファイル内に記述してもよい．
 
 ### Tab 4: PointCloud to LaserScan
