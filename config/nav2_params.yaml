@@ -1,7 +1,37 @@
+map_server:
+  ros__parameters:
+    use_sim_time: false
+    yaml_filename: ""
+
+amcl:
+  ros__parameters:
+    use_sim_time: false
+
+    global_frame_id: map
+    odom_frame_id: odom
+    base_frame_id: base_link
+
+    scan_topic: scan
+
+    tf_broadcast: true
+    transform_tolerance: 0.5
+
+    min_particles: 500
+    max_particles: 2000
+
+    update_min_d: 0.10
+    update_min_a: 0.10
+
+    laser_min_range: 0.3
+    laser_max_range: 8.0
+
+    set_initial_pose: false
+    always_reset_initial_pose: false
+
 bt_navigator:
   ros__parameters:
     use_sim_time: false
-    global_frame: camera_init
+    global_frame: map
     robot_base_frame: base_link
     odom_topic: /Odometry
     bt_loop_duration: 10
@@ -80,7 +110,7 @@ local_costmap:
   local_costmap:
     ros__parameters:
       use_sim_time: false
-      global_frame: camera_init
+      global_frame: odom
       robot_base_frame: base_link
       rolling_window: true
       width: 6
@@ -118,23 +148,26 @@ global_costmap:
   global_costmap:
     ros__parameters:
       use_sim_time: false
-      global_frame: camera_init
+      global_frame: map
       robot_base_frame: base_link
-      rolling_window: true
-      track_unknown_space: false
-      width: 20
-      height: 20
-      resolution: 0.10
+      rolling_window: false
+      track_unknown_space: true
+      resolution: 0.05
       update_frequency: 5.0
       publish_frequency: 2.0
-      transform_tolerance: 0.3
+      transform_tolerance: 0.5
 
-      plugins: ["obstacle_layer", "inflation_layer"]
+      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
+      
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        map_subscribe_transient_local: true
 
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: true
         observation_sources: scan
+        
         scan:
           topic: /scan
           data_type: "LaserScan"
@@ -176,7 +209,7 @@ smoother_server:
 behavior_server:
   ros__parameters:
     use_sim_time: false
-    global_frame: camera_init
+    global_frame: odom
     robot_base_frame: base_link
     transform_tolerance: 0.3
     costmap_topic: local_costmap/costmap_raw
