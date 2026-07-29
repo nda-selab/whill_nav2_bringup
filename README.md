@@ -192,23 +192,6 @@ map
 - body の +x方向 = WHILL後方
 - base_link の +x方向 = WHILL前方
 
-Nav2では以下のように設定する．
-
-- global_frame: odom
-- robot_base_frame: base_link
-
-また，Nav2へ入力するLaserScan `/scan` も `base_link` 座標系で出力する．
-
-```bash
-ros2 topic echo /scan --once | grep frame_id
-```
-
-期待される出力は以下である．
-
-```text
-frame_id: base_link
-```
-
 ## Initial Setup
 
 ### Check user groups
