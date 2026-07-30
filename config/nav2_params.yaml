@@ -33,7 +33,7 @@ bt_navigator:
     use_sim_time: false
     global_frame: map
     robot_base_frame: base_link
-    odom_topic: /Odometry
+    odom_topic: /odom_nav
     bt_loop_duration: 10
     default_server_timeout: 20
 
@@ -41,7 +41,12 @@ controller_server:
   ros__parameters:
     use_sim_time: false
     controller_frequency: 10.0
-    odom_topic: /Odometry
+    odom_topic: /odom_nav
+    
+    min_x_velocity_threshold: 0.01
+    min_y_velocity_threshold: 0.01
+    min_theta_velocity_threshold: 0.02
+    
     progress_checker_plugin: "progress_checker"
     goal_checker_plugins: ["goal_checker"]
     controller_plugins: ["FollowPath"]
@@ -119,6 +124,7 @@ local_costmap:
       update_frequency: 10.0
       publish_frequency: 5.0
       transform_tolerance: 0.3
+      footprint: "[[0.80, 0.30], [0.80, -0.30], [-0.30, -0.30], [-0.30, 0.30]]"
 
       plugins: ["obstacle_layer", "inflation_layer"]
 
@@ -156,6 +162,7 @@ global_costmap:
       update_frequency: 5.0
       publish_frequency: 2.0
       transform_tolerance: 0.5
+      footprint: "[[0.80, 0.30], [0.80, -0.30], [-0.30, -0.30], [-0.30, 0.30]]"
 
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
       
@@ -238,7 +245,7 @@ velocity_smoother:
     min_velocity: [0.0, 0.0, -0.5]
     max_accel: [0.3, 0.0, 0.5]
     max_decel: [-0.3, 0.0, -0.5]
-    odom_topic: /Odometry
+    odom_topic: /odom_nav
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]
     velocity_timeout: 1.0
