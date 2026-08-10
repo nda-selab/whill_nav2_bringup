@@ -3,39 +3,39 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    body_to_os_sensor = Node(
+    base_link_to_os_sensor = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
-        name='static_tf_body_to_os_sensor',
+        name='static_tf_base_link_to_os_sensor',
         arguments=[
-            '--x', '-0.10',
+            '--x', '-0.12',
             '--y', '0.00',
-            '--z', '1.20',
+            '--z', '0.70',
             '--roll', '0.0',
             '--pitch', '0.0',
             '--yaw', '0.0',
-            '--frame-id', 'body',
-            '--child-frame-id', 'os_sensor'
+            '--frame-id', 'base_link',
+            '--child-frame-id', 'os_sensor',
         ]
     )
-
-    body_to_base_link = Node(
+    
+    base_link_to_laser = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
-        name='static_tf_body_to_base_link',
+        name='static_tf_base_link_to_laser',
         arguments=[
-            '--x', '0.0',
-            '--y', '0.0',
-            '--z', '0.0',
+            '--x', '0.70',
+            '--y', '0.00',
+            '--z', '0.05',
             '--roll', '0.0',
             '--pitch', '0.0',
-            '--yaw', '3.14159265359',
-            '--frame-id', 'body',
-            '--child-frame-id', 'base_link'
+            '--yaw', '0.0',
+            '--frame-id', 'base_link',
+            '--child-frame-id', 'laser',
         ]
     )
-
+    
     return LaunchDescription([
-        body_to_os_sensor,
-        body_to_base_link,
+        base_link_to_os_sensor,
+        base_link_to_laser
     ])

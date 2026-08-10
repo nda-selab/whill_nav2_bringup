@@ -11,7 +11,7 @@ amcl:
     odom_frame_id: odom
     base_frame_id: base_link
 
-    scan_topic: scan
+    scan_topic: /scan_ouster
 
     tf_broadcast: true
     transform_tolerance: 0.5
@@ -27,6 +27,12 @@ amcl:
 
     set_initial_pose: true
     always_reset_initial_pose: true
+    
+    initial_pose:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+      yaw: 0.0
 
 bt_navigator:
   ros__parameters:
@@ -131,16 +137,28 @@ local_costmap:
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: true
-        observation_sources: scan
-        scan:
-          topic: /scan
+        observation_sources: ouster_scan urg_scan
+        ouster_scan:
+          topic: /scan_ouster
           data_type: "LaserScan"
           marking: true
           clearing: true
+          inf_is_valid: true
           obstacle_min_range: 0.3
-          obstacle_max_range: 5.0
+          obstacle_max_range: 8.0
           raytrace_min_range: 0.3
-          raytrace_max_range: 6.0
+          raytrace_max_range: 10.0
+          max_obstacle_height: 2.0
+        urg_scan:
+          topic: /scan_urg
+          data_type: "LaserScan"
+          marking: true
+          clearing: true
+          inf_is_valid: true
+          obstacle_min_range: 0.05
+          obstacle_max_range: 4.0
+          raytrace_min_range: 0.05
+          raytrace_max_range: 4.0
           max_obstacle_height: 2.0
 
       inflation_layer:
@@ -173,13 +191,14 @@ global_costmap:
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: true
-        observation_sources: scan
+        observation_sources: ouster_scan
         
-        scan:
-          topic: /scan
+        ouster_scan:
+          topic: /scan_ouster
           data_type: "LaserScan"
           marking: true
           clearing: true
+          inf_is_valid: true
           obstacle_min_range: 0.3
           obstacle_max_range: 8.0
           raytrace_min_range: 0.3
@@ -242,7 +261,7 @@ velocity_smoother:
     scale_velocities: false
     feedback: "OPEN_LOOP"
     max_velocity: [0.25, 0.0, 0.5]
-    min_velocity: [0.0, 0.0, -0.5]
+    min_velocity: [-0.15, 0.0, -0.5]
     max_accel: [0.3, 0.0, 0.5]
     max_decel: [-0.3, 0.0, -0.5]
     odom_topic: /odom_nav

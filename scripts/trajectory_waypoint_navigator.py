@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""FAST-LIO2 trajectory CSV -> Nav2 NavigateThroughPoses.
+"""FAST-LIO2 trajectory CSV -> Nav2 FollowWaypoints.
 
 Default behavior is preview-only:
 - Reads a FAST-LIO2 trajectory CSV.
@@ -17,12 +17,11 @@ from __future__ import annotations
 import argparse
 import csv
 import math
-import signal
 import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Optional, Sequence
+from typing import Optional, Sequence
 
 import rclpy
 from geometry_msgs.msg import PoseStamped
@@ -149,8 +148,10 @@ class GridMap:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "FAST-LIO2軌跡CSVを間引いてNav2 NavigateThroughPosesへ入力します。"
-            "既定ではプレビューのみで、--execute指定時だけ走行要求を送信します。"
+            "FAST-LIO2軌跡CSVを間引いて"
+            "Nav2 FollowWaypointsへ入力する．"
+            "既定ではプレビューのみで，"
+            "--execute指定時だけ走行要求を送信する．"
         )
     )
     parser.add_argument(
@@ -163,7 +164,7 @@ def parse_args() -> argparse.Namespace:
         "--map-yaml",
         type=Path,
         required=True,
-        help="Nav2地図YAML。ウェイポイントの障害物チェックに使用",
+        help="Nav2地図YAML．ウェイポイントの障害物チェックに使用",
     )
     parser.add_argument(
         "--frame-id",
@@ -180,7 +181,7 @@ def parse_args() -> argparse.Namespace:
         "--end-index",
         type=int,
         default=-1,
-        help="CSVデータ行の終了番号。-1は末尾（既定値: -1）",
+        help="CSVデータ行の終了番号．-1は末尾（既定値: -1）",
     )
     parser.add_argument(
         "--reverse",
@@ -229,10 +230,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--body-to-base-yaw",
         type=float,
-        default=math.pi,
+        default=0.0,
         help=(
             "yaw-source=body時に加えるbody->base_link yaw[rad]"
-            "（既定値: pi）"
+            "（既定値: 0.0）"
         ),
     )
     parser.add_argument(
@@ -276,7 +277,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--execute",
         action="store_true",
-        help="NavigateThroughPosesを実行する。未指定時はプレビューのみ",
+        help=(
+            "FollowWaypointsを実行する．"
+            "未指定時はプレビューのみ"),
     )
     parser.add_argument(
         "--timeout",
@@ -296,15 +299,23 @@ def validate_args(args: argparse.Namespace) -> None:
         "raw_min_step",
         "waypoint_spacing",
         "corner_min_spacing",
+        "start_skip_distance",
         "clearance",
-        "timeout",
     ):
         if getattr(args, name) < 0.0:
             raise ValueError(f"--{name.replace('_', '-')}は0以上にしてください")
+    if args.waypoint_spacing <= 0.0:
+        raise ValueError("--waypoint-spacingは0より大きくしてください")
+    if args.timeout <= 0.0:
+        raise ValueError("--timeoutは0より大きくしてください")
     if not (0.0 <= args.corner_angle_deg <= 180.0):
         raise ValueError("--corner-angle-degは0～180にしてください")
     if args.max_waypoints < 2:
         raise ValueError("--max-waypointsは2以上にしてください")
+    if args.execute and args.unsafe_policy != "error":
+        raise ValueError("--execute時は--unsafe-policy errorを使用してください")
+    if args.execute and not args.plan_preview:
+        raise ValueError("--execute時は安全確認のため--plan-previewを併用してください")
 
 
 def quaternion_to_yaw(x: float, y: float, z: float, w: float) -> float:
@@ -692,6 +703,166 @@ def create_poses(
         for index, waypoint in enumerate(waypoints)
     ]
 
+def calculate_path_length(path: NavPath) -> float:
+    """nav_msgs/Pathの二次元経路長を計算する。"""
+
+    total_length = 0.0
+
+    for index in range(1, len(path.poses)):
+        previous = path.poses[index - 1].pose.position
+        current = path.poses[index].pose.position
+
+        total_length += math.hypot(
+            current.x - previous.x,
+            current.y - previous.y,
+        )
+
+    return total_length
+
+def plan_path_by_segments(
+    navigator: BasicNavigator,
+    frame_id: str,
+    start_pose: PoseStamped,
+    route_start: Sample,
+    poses: Sequence[PoseStamped],
+    waypoints: Sequence[Sample],
+) -> NavPath:
+    """各ウェイポイント間を個別に計画し、失敗区間を特定する。"""
+
+    combined_path = NavPath()
+    combined_path.header.frame_id = frame_id
+    combined_path.header.stamp = (
+        navigator.get_clock().now().to_msg()
+    )
+
+    current_pose = start_pose
+    current_sample = route_start
+
+    print("\nウェイポイント間の個別経路を検査します...")
+
+    for index, (goal_pose, goal_sample) in enumerate(
+        zip(poses, waypoints)
+    ):
+        # 各要求時点の時刻へ更新する。
+        stamp = navigator.get_clock().now().to_msg()
+        current_pose.header.stamp = stamp
+        goal_pose.header.stamp = stamp
+
+        segment_distance = math.hypot(
+            goal_sample.x - current_sample.x,
+            goal_sample.y - current_sample.y,
+        )
+
+        print(
+            f"  segment[{index:02d}] "
+            f"CSV行{current_sample.source_index} "
+            f"({current_sample.x:.3f}, {current_sample.y:.3f})"
+            " -> "
+            f"CSV行{goal_sample.source_index} "
+            f"({goal_sample.x:.3f}, {goal_sample.y:.3f}), "
+            f"直線距離={segment_distance:.2f} m"
+        )
+
+        segment_path = navigator.getPath(
+            current_pose,
+            goal_pose,
+            use_start=True,
+        )
+
+        if segment_path is None or len(segment_path.poses) == 0:
+            raise RuntimeError(
+                "\nPlanner経路生成不能区間を検出しました:\n"
+                f"  segment       : {index}\n"
+                f"  start CSV行  : {current_sample.source_index}\n"
+                f"  start         : "
+                f"({current_sample.x:.3f}, "
+                f"{current_sample.y:.3f})\n"
+                f"  goal CSV行   : {goal_sample.source_index}\n"
+                f"  goal          : "
+                f"({goal_sample.x:.3f}, "
+                f"{goal_sample.y:.3f})\n"
+                f"  straight dist : {segment_distance:.2f} m\n"
+                "この2点をGlobal Costmap上で確認してください"
+            )
+        
+        planned_distance = calculate_path_length(segment_path)
+        
+        detour_ratio = (
+            planned_distance / segment_distance
+            if segment_distance > 1.0e-6
+            else 1.0
+        )
+        
+        print(
+            f"    OK: {len(segment_path.poses)} path poses, "
+            f"経路長={planned_distance:.2f} m, "
+            f"迂回率={detour_ratio:.2f}"
+        )
+        
+        maximum_allowed_distance = max(
+            segment_distance * 3.0,
+            segment_distance + 5.0,
+        )
+        
+        if planned_distance > maximum_allowed_distance:
+            raise RuntimeError(
+                "\n異常な迂回経路を検出しました:\n"
+                f"  segment       : {index}\n"
+                f"  start CSV行  : {current_sample.source_index}\n"
+                f"  goal CSV行   : {goal_sample.source_index}\n"
+                f"  straight dist : {segment_distance:.2f} m\n"
+                f"  planned dist  : {planned_distance:.2f} m\n"
+                f"  detour ratio  : {detour_ratio:.2f}\n"
+                "Global Costmap、Obstacle Layer、"
+                "TF、LaserScanを確認してください"
+            )
+
+        # 2区間目以降は先頭点が前区間の終点と重複するため除外する。
+        if not combined_path.poses:
+            combined_path.poses.extend(segment_path.poses)
+        elif len(segment_path.poses) >= 2:
+            combined_path.poses.extend(segment_path.poses[1:])
+        else:
+            combined_path.poses.extend(segment_path.poses)
+
+        current_pose = goal_pose
+        current_sample = goal_sample
+
+    if not combined_path.poses:
+        raise RuntimeError("結合後のPlanner経路が空です")
+
+    combined_path.header.stamp = (
+        navigator.get_clock().now().to_msg()
+    )
+
+    print(
+        "\n全区間の個別経路生成に成功しました: "
+        f"{len(combined_path.poses)} poses"
+    )
+
+    return combined_path
+
+def shutdown_navigator(
+    navigator: BasicNavigator,
+) -> None:
+    """Navigatorノードとrclpyを安全に終了する。"""
+
+    try:
+        navigator.destroyNode()
+    except Exception as error:
+        print(
+            f"WARNING: Navigator終了処理に失敗しました: {error}",
+            file=sys.stderr,
+        )
+
+    if rclpy.ok():
+        try:
+            rclpy.shutdown()
+        except Exception as error:
+            print(
+                f"WARNING: rclpy終了処理に失敗しました: {error}",
+                file=sys.stderr,
+            )
 
 def publish_preview(
     navigator: BasicNavigator,
@@ -732,7 +903,7 @@ def print_summary(
     print(f"Clearance          : {args.clearance:.2f} m")
     print(
         f"Mode               : "
-        f"{'EXECUTE NavigateThroughPoses' if args.execute else 'PREVIEW ONLY'}"
+        f"{'EXECUTE FollowWaypoints' if args.execute else 'PREVIEW ONLY'}"
     )
     print("First/last waypoint:")
     print(
@@ -784,6 +955,10 @@ def main() -> int:
 
     rclpy.init()
     navigator = BasicNavigator(node_name="trajectory_waypoint_navigator")
+    
+    if args.plan_preview or args.execute:
+        print("Nav2がActive状態になるまで待機します...")
+        navigator.waitUntilNav2Active()
 
     preview_qos = QoSProfile(
         history=HistoryPolicy.KEEP_LAST,
@@ -826,23 +1001,73 @@ def main() -> int:
 
     planned_path = None
     if args.plan_preview:
-        print("Nav2 PlannerへComputePathThroughPosesを要求します...")
-        ignored_start = PoseStamped()
-        ignored_start.header.frame_id = args.frame_id
-        ignored_start.header.stamp = navigator.get_clock().now().to_msg()
-        ignored_start.pose.orientation.w = 1.0
-        planned_path = navigator.getPathThroughPoses(
-            ignored_start,
-            poses,
-            use_start=False,
+        print("Nav2 Plannerへ区間別のComputePathToPoseを要求します...")
+        
+        # ノイズ除去後の軌跡先頭をPlannerの開始姿勢にする。
+        # --reverse指定時も、cleaned_samples[0]が逆走開始点になる。
+        route_start = cleaned_samples[0]
+        
+        # 経路開始点そのものも地図上で安全か確認する。
+        start_is_safe, start_reason = grid_map.clearance_check(
+            route_start.x,
+            route_start.y,
+            args.clearance,
+            not args.allow_unknown,
         )
+        
+        if not start_is_safe:
+            raise RuntimeError(
+                "軌跡開始点がPlanner開始姿勢として使用できません: "
+                f"CSV行={route_start.source_index}, "
+                f"x={route_start.x:.3f}, "
+                f"y={route_start.y:.3f}: "
+                f"{start_reason}"
+            )
+        
+        # 開始姿勢は最初のウェイポイント方向へ向ける。
+        start_yaw = math.atan2(
+            waypoints[0].y - route_start.y,
+            waypoints[0].x - route_start.x,
+        )
+        
+        start_pose = make_pose(
+            navigator,
+            args.frame_id,
+            route_start.x,
+            route_start.y,
+            start_yaw,
+        )
+        
+        print(
+            "Planner start      : "
+            f"CSV行={route_start.source_index}, "
+            f"({route_start.x:.3f}, {route_start.y:.3f}), "
+            f"yaw={math.degrees(start_yaw):.1f} deg"
+        )
+        
+        # 現在のbase_link位置ではなく、CSV開始姿勢を明示的に使用する。
+        planned_path = plan_path_by_segments(
+            navigator=navigator,
+            frame_id=args.frame_id,
+            start_pose=start_pose,
+            route_start=route_start,
+            poses=poses,
+            waypoints=waypoints,
+        )
+        
         if planned_path is None or len(planned_path.poses) == 0:
-            raise RuntimeError("Nav2 Plannerが経由経路を生成できませんでした")
+            raise RuntimeError(
+                "Nav2 Plannerが経由経路を生成できませんでした。"
+                "Planner Serverのログを確認してください"
+            )
+
         planned_path.header.frame_id = args.frame_id
         planned_path.header.stamp = navigator.get_clock().now().to_msg()
+        
         planned_path_publisher.publish(planned_path)
         print(
-            f"Planned path       : {len(planned_path.poses)} poses, "
+            f"Planned path       : "
+            f"{len(planned_path.poses)} poses, "
             f"topic={args.planned_path_topic}"
         )
 
@@ -865,25 +1090,71 @@ def main() -> int:
                     planned_path_publisher.publish(planned_path)
                 rclpy.spin_once(navigator, timeout_sec=1.0)
         except KeyboardInterrupt:
-            pass
+            print("\nCtrl+Cを受信しました")
         finally:
-            navigator.destroyNode()
-            rclpy.shutdown()
+            shutdown_navigator(navigator)
         return 0
 
     print(
         "\n--executeが指定されました。"
+        "FollowWaypointsによる順次走行を開始します。"
         "WHILLの非常停止手段を確保した状態で実行します。"
     )
+    
+    execution_stamp = navigator.get_clock().now().to_msg()
+    
+    for pose in poses:
+        pose.header.stamp = execution_stamp
+        
+    print(
+        "現在位置から最初のウェイポイントまでの"
+        "経路を確認します..."
+    )
+    
+    current_to_first_path = navigator.getPath(
+        poses[0],
+        poses[0],
+        use_start=False,
+    )
+    
+    if (
+        current_to_first_path is None
+        or len(current_to_first_path.poses) == 0
+    ):
+        shutdown_navigator(navigator)
 
-    accepted = navigator.goThroughPoses(poses)
+        raise RuntimeError(
+            "現在位置から最初のウェイポイントまでの"
+            "経路を生成できません"
+        )
+        
+    current_to_first_length = calculate_path_length(
+        current_to_first_path
+    )
+
+    print(
+        f"Current-to-first   : "
+        f"{len(current_to_first_path.poses)} path poses, "
+        f"経路長={current_to_first_length:.2f} m"
+    )
+    
+    # Planner問い合わせ後に姿勢の時刻を更新する。
+    execution_stamp = navigator.get_clock().now().to_msg()
+    
+    for pose in poses:
+        pose.header.stamp = execution_stamp
+
+    accepted = navigator.followWaypoints(poses)
+    
     if not accepted:
-        navigator.destroyNode()
-        rclpy.shutdown()
-        raise RuntimeError("NavigateThroughPoses goalが拒否されました")
+        shutdown_navigator(navigator)
+        raise RuntimeError(
+            "FollowWaypoints goalが拒否されました"
+        )
 
     start_time = time.monotonic()
     last_feedback_print = 0.0
+    cancel_requested = False
 
     try:
         while not navigator.isTaskComplete():
@@ -895,46 +1166,75 @@ def main() -> int:
             )
 
             elapsed = time.monotonic() - start_time
+            
             if elapsed > args.timeout:
                 print("タイムアウトのためナビゲーションをキャンセルします")
                 navigator.cancelTask()
+                cancel_requested = True
                 break
 
             feedback = navigator.getFeedback()
+            
             if feedback is not None and elapsed - last_feedback_print >= 2.0:
-                remaining = getattr(
+                current_waypoint_value = getattr(
                     feedback,
-                    "number_of_poses_remaining",
+                    "current_waypoint",
                     None,
                 )
-                if remaining is None:
+                if current_waypoint_value is None:
                     print(f"navigation elapsed: {elapsed:.1f} s")
                 else:
+                    current_waypoint = int(current_waypoint_value)
+                    
+                    # 現在処理中のウェイポイントを含む残り件数
+                    remaining = max(
+                        0,
+                        len(poses) - int(current_waypoint),
+                    )
+                    
                     print(
                         f"navigation elapsed: {elapsed:.1f} s, "
-                        f"remaining poses: {remaining}"
+                        f"current waypoint: "
+                        f"{current_waypoint + 1}/{len(poses)}, "
+                        f"remaining including current: {remaining}"
                     )
+                    
                 last_feedback_print = elapsed
+                
     except KeyboardInterrupt:
         print("\nCtrl+Cを受信したためナビゲーションをキャンセルします")
-        navigator.cancelTask()
-
+        
+        if rclpy.ok():
+            navigator.cancelTask()
+            cancel_requested = True
+            
+    # キャンセル要求後、結果が反映されるまで短時間処理する。
+    if cancel_requested:
+        cancel_wait_start = time.monotonic()
+        
+        while (
+            rclpy.ok()
+            and not navigator.isTaskComplete()
+            and time.monotonic() - cancel_wait_start < 5.0
+        ):
+            time.sleep(0.05)
+        
     result = navigator.getResult()
+    
     if result == TaskResult.SUCCEEDED:
-        print("NavigateThroughPoses: SUCCEEDED")
+        print("FollowWaypoints: SUCCEEDED")
         return_code = 0
     elif result == TaskResult.CANCELED:
-        print("NavigateThroughPoses: CANCELED")
+        print("FollowWaypoints: CANCELED")
         return_code = 2
     elif result == TaskResult.FAILED:
-        print("NavigateThroughPoses: FAILED")
+        print("FollowWaypoints: FAILED")
         return_code = 1
     else:
-        print("NavigateThroughPoses: UNKNOWN")
+        print("FollowWaypoints: UNKNOWN")
         return_code = 1
 
-    navigator.destroyNode()
-    rclpy.shutdown()
+    shutdown_navigator(navigator)
     return return_code
 
 
