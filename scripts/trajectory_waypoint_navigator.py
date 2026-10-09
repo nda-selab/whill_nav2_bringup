@@ -6,7 +6,7 @@ Default behavior is preview-only:
 - Removes stationary/noisy samples.
 - Selects waypoints by distance and corner angle.
 - Generates base_link headings from the path tangent.
-- Checks waypoint clearance against a Nav2 map YAML/PGM.
+- Checks oriented footprints and an extra clearance against a Nav2 map YAML/PGM.
 - Publishes the selected poses as nav_msgs/Path on /trajectory_waypoints.
 
 Navigation is started only when --execute is explicitly specified.
@@ -45,6 +45,88 @@ REQUIRED_COLUMNS = (
     "q_w_b_w",
 )
 
+Footprint = tuple[tuple[float, float], ...]
+DEFAULT_NAV2_PARAMS = Path(__file__).resolve().parents[1] / "config/nav2_params.yaml"
+
+
+def distance_to_polygon(x: float, y: float, polygon: Footprint) -> float:
+    """Distance to a filled convex polygon, including its boundary."""
+    positive = negative = False
+    minimum_sq = math.inf
+    for index, (ax, ay) in enumerate(polygon):
+        bx, by = polygon[(index + 1) % len(polygon)]
+        dx, dy = bx - ax, by - ay
+        cross = dx * (y - ay) - dy * (x - ax)
+        positive = positive or cross > 1.0e-12
+        negative = negative or cross < -1.0e-12
+        fraction = max(0.0, min(1.0, (
+            (x - ax) * dx + (y - ay) * dy
+        ) / (dx * dx + dy * dy)))
+        minimum_sq = min(
+            minimum_sq,
+            (x - ax - fraction * dx) ** 2 + (y - ay - fraction * dy) ** 2,
+        )
+    if not (positive and negative):
+        return 0.0
+    return math.sqrt(minimum_sq)
+
+
+def validate_footprint(points) -> Footprint:
+    """Reject malformed, degenerate, or non-convex footprints."""
+    try:
+        if not isinstance(points, (list, tuple)) or len(points) < 3:
+            raise ValueError
+        if any(not isinstance(p, (list, tuple)) or len(p) != 2 for p in points):
+            raise ValueError
+        polygon = tuple((float(p[0]), float(p[1])) for p in points)
+        if not all(math.isfinite(v) for p in polygon for v in p):
+            raise ValueError
+        if len(set(polygon)) != len(polygon):
+            raise ValueError
+        area = sum(
+            ax * polygon[(i + 1) % len(polygon)][1]
+            - ay * polygon[(i + 1) % len(polygon)][0]
+            for i, (ax, ay) in enumerate(polygon)
+        )
+        if abs(area) < 1.0e-12:
+            raise ValueError
+        orientation = 1.0 if area > 0.0 else -1.0
+        for i, (ax, ay) in enumerate(polygon):
+            bx, by = polygon[(i + 1) % len(polygon)]
+            if any(
+                orientation * ((bx - ax) * (py - ay) - (by - ay) * (px - ax))
+                < -1.0e-12 for px, py in polygon
+            ):
+                raise ValueError
+    except (TypeError, ValueError, OverflowError) as error:
+        raise ValueError("footprintは有限な座標を持つ凸多角形にしてください") from error
+    return polygon
+
+
+def load_footprint(params_path: Path) -> Footprint:
+    """Read the local costmap footprint, including Nav2's axis-wise padding."""
+    with params_path.expanduser().resolve().open(encoding="utf-8") as file:
+        config = yaml.safe_load(file)
+    try:
+        params = config["local_costmap"]["local_costmap"]["ros__parameters"]
+        points = params["footprint"]
+        if isinstance(points, str):
+            points = yaml.safe_load(points)
+        polygon = validate_footprint(points)
+        # Nav2 Humble defaults to 0.01 m and pads each signed coordinate.
+        padding = float(params.get("footprint_padding", 0.01))
+        if not math.isfinite(padding) or padding < 0.0:
+            raise ValueError("footprint_paddingは有限な0以上の値にしてください")
+        padded = tuple(
+            tuple(value + padding * ((value > 0) - (value < 0)) for value in point)
+            for point in polygon
+        )
+        return validate_footprint(padded)
+    except (KeyError, TypeError) as error:
+        raise ValueError(
+            "Nav2設定にlocal_costmap.local_costmap.ros__parameters.footprintが必要です"
+        ) from error
+
 
 @dataclass(frozen=True)
 class Sample:
@@ -69,8 +151,8 @@ class GridMap:
     negate: bool
     pixels: bytes
 
-    def world_to_image(self, x: float, y: float) -> Optional[tuple[int, int]]:
-        """Convert map-frame coordinates to PGM row/column."""
+    def world_to_local(self, x: float, y: float) -> tuple[float, float]:
+        """Coordinates relative to the occupancy grid's translated/rotated origin."""
         dx = x - self.origin_x
         dy = y - self.origin_y
 
@@ -78,8 +160,11 @@ class GridMap:
         s = math.sin(self.origin_yaw)
 
         # R(-yaw) * [dx, dy]
-        local_x = c * dx + s * dy
-        local_y = -s * dx + c * dy
+        return c * dx + s * dy, -s * dx + c * dy
+
+    def world_to_image(self, x: float, y: float) -> Optional[tuple[int, int]]:
+        """Convert map-frame coordinates to PGM row/column."""
+        local_x, local_y = self.world_to_local(x, y)
 
         map_x = math.floor(local_x / self.resolution)
         map_y = math.floor(local_y / self.resolution)
@@ -112,35 +197,54 @@ class GridMap:
         self,
         x: float,
         y: float,
+        yaw: float,
+        footprint: Footprint,
         clearance: float,
         unknown_is_obstacle: bool,
     ) -> tuple[bool, str]:
-        center = self.world_to_image(x, y)
-        if center is None:
-            return False, "地図範囲外"
+        """Check the filled, oriented footprint and an extra exterior margin.
 
-        center_row, center_col = center
-        radius_cells = max(0, math.ceil(clearance / self.resolution))
-        radius_sq = radius_cells * radius_cells
+        Obstacle cells are conservatively enclosed by their circumscribed circles
+        so a cell touching an edge or corner cannot slip between sampled points.
+        """
+        if not all(math.isfinite(v) for v in (x, y, yaw, clearance)) or clearance < 0:
+            raise ValueError("位置・yaw・clearanceは有限値、clearanceは0以上が必要です")
+        c, s = math.cos(yaw), math.sin(yaw)
+        polygon = tuple(
+            self.world_to_local(x + c * px - s * py, y + s * px + c * py)
+            for px, py in footprint
+        )
+        min_x = min(px for px, _ in polygon) - clearance
+        max_x = max(px for px, _ in polygon) + clearance
+        min_y = min(py for _, py in polygon) - clearance
+        max_y = max(py for _, py in polygon) + clearance
+        if (min_x < 0 or min_y < 0 or max_x >= self.width * self.resolution
+                or max_y >= self.height * self.resolution):
+            return False, "車体または追加余裕が地図範囲外"
 
-        for dr in range(-radius_cells, radius_cells + 1):
-            row = center_row + dr
-            if row < 0 or row >= self.height:
-                return False, "安全半径が地図範囲外"
-
-            for dc in range(-radius_cells, radius_cells + 1):
-                if dr * dr + dc * dc > radius_sq:
-                    continue
-
-                col = center_col + dc
-                if col < 0 or col >= self.width:
-                    return False, "安全半径が地図範囲外"
-
+        cell_margin = self.resolution / math.sqrt(2.0)
+        limit = clearance + cell_margin
+        for map_y in range(
+            max(0, math.floor(min_y / self.resolution) - 1),
+            min(self.height, math.floor(max_y / self.resolution) + 2),
+        ):
+            row = self.height - 1 - map_y
+            for col in range(
+                max(0, math.floor(min_x / self.resolution) - 1),
+                min(self.width, math.floor(max_x / self.resolution) + 2),
+            ):
                 state = self.cell_state(row, col)
+                if state == "free" or (state == "unknown" and not unknown_is_obstacle):
+                    continue
+                if distance_to_polygon(
+                    (col + 0.5) * self.resolution,
+                    (map_y + 0.5) * self.resolution,
+                    polygon,
+                ) > limit + 1.0e-12:
+                    continue
                 if state == "occupied":
-                    return False, "障害物に近すぎる"
-                if state == "unknown" and unknown_is_obstacle:
-                    return False, "未知領域に近すぎる"
+                    return False, "車体または追加余裕が障害物に接触"
+                return False, "車体または追加余裕が未知領域に接触"
 
         return True, "free"
 
@@ -165,6 +269,12 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         required=True,
         help="Nav2地図YAML．ウェイポイントの障害物チェックに使用",
+    )
+    parser.add_argument(
+        "--nav2-params",
+        type=Path,
+        default=DEFAULT_NAV2_PARAMS,
+        help="footprintを読み込むNav2設定YAML（既定値: config/nav2_params.yaml）",
     )
     parser.add_argument(
         "--frame-id",
@@ -240,7 +350,7 @@ def parse_args() -> argparse.Namespace:
         "--clearance",
         type=float,
         default=0.45,
-        help="各ウェイポイント周囲に必要な自由半径[m]（既定値: 0.45）",
+        help="Nav2のfootprint外周に追加する余裕[m]（既定値: 0.45）",
     )
     parser.add_argument(
         "--allow-unknown",
@@ -302,8 +412,8 @@ def validate_args(args: argparse.Namespace) -> None:
         "start_skip_distance",
         "clearance",
     ):
-        if getattr(args, name) < 0.0:
-            raise ValueError(f"--{name.replace('_', '-')}は0以上にしてください")
+        if not math.isfinite(getattr(args, name)) or getattr(args, name) < 0.0:
+            raise ValueError(f"--{name.replace('_', '-')}は有限な0以上の値にしてください")
     if args.waypoint_spacing <= 0.0:
         raise ValueError("--waypoint-spacingは0より大きくしてください")
     if args.timeout <= 0.0:
@@ -582,12 +692,18 @@ def load_grid_map(yaml_path: Path) -> GridMap:
     if not (0.0 <= free_thresh < occupied_thresh <= 1.0):
         raise RuntimeError("地図YAMLのfree/occupied閾値が不正です")
 
+    resolution = float(config["resolution"])
+    if not math.isfinite(resolution) or resolution <= 0.0:
+        raise RuntimeError("地図YAMLのresolutionは有限な正の値にしてください")
+    if not all(math.isfinite(float(value)) for value in origin[:3]):
+        raise RuntimeError("地図YAMLのoriginは有限値にしてください")
+
     return GridMap(
         yaml_path=yaml_path,
         image_path=image_path,
         width=width,
         height=height,
-        resolution=float(config["resolution"]),
+        resolution=resolution,
         origin_x=float(origin[0]),
         origin_y=float(origin[1]),
         origin_yaw=float(origin[2]),
@@ -601,44 +717,43 @@ def load_grid_map(yaml_path: Path) -> GridMap:
 def filter_unsafe_waypoints(
     waypoints: Sequence[Sample],
     grid_map: GridMap,
+    footprint: Footprint,
     clearance: float,
     unknown_is_obstacle: bool,
     policy: str,
+    yaw_source: str,
+    body_to_base_yaw: float,
 ) -> list[Sample]:
-    safe: list[Sample] = []
-    unsafe_messages: list[str] = []
+    candidates = list(waypoints)
+    while len(candidates) >= 2:
+        safe: list[Sample] = []
+        unsafe_messages: list[str] = []
+        for output_index, waypoint in enumerate(candidates):
+            yaw = waypoint_yaw(candidates, output_index, yaw_source, body_to_base_yaw)
+            valid, reason = grid_map.clearance_check(
+                waypoint.x, waypoint.y, yaw, footprint, clearance, unknown_is_obstacle,
+            )
+            if valid:
+                safe.append(waypoint)
+                continue
+            unsafe_messages.append(
+                f"waypoint[{output_index}] CSV行={waypoint.source_index} "
+                f"x={waypoint.x:.3f}, y={waypoint.y:.3f}, yaw={yaw:.3f}: {reason}"
+            )
 
-    for output_index, waypoint in enumerate(waypoints):
-        valid, reason = grid_map.clearance_check(
-            waypoint.x,
-            waypoint.y,
-            clearance,
-            unknown_is_obstacle,
-        )
-        if valid:
-            safe.append(waypoint)
-            continue
-
-        message = (
-            f"waypoint[{output_index}] CSV行={waypoint.source_index} "
-            f"x={waypoint.x:.3f}, y={waypoint.y:.3f}: {reason}"
-        )
-        unsafe_messages.append(message)
-
-    if unsafe_messages:
+        if not unsafe_messages:
+            return safe
         print("\n危険判定された候補点:", file=sys.stderr)
         for message in unsafe_messages:
             print(f"  {message}", file=sys.stderr)
-
         if policy == "error":
             raise RuntimeError(
                 "危険なウェイポイントがあります。地図・clearance・区間を確認してください"
             )
+        # Removing a point changes tangent headings: check the remaining poses again.
+        candidates = safe
 
-    if len(safe) < 2:
-        raise RuntimeError("安全性フィルタ後のウェイポイントが2点未満です")
-
-    return safe
+    raise RuntimeError("安全性フィルタ後のウェイポイントが2点未満です")
 
 
 def waypoint_yaw(
@@ -900,7 +1015,8 @@ def print_summary(
     )
     print(f"Map image          : {grid_map.image_path}")
     print(f"Yaw source         : {args.yaw_source}")
-    print(f"Clearance          : {args.clearance:.2f} m")
+    print(f"Footprint config   : {args.nav2_params.expanduser().resolve()}")
+    print(f"Extra clearance    : {args.clearance:.2f} m outside footprint")
     print(
         f"Mode               : "
         f"{'EXECUTE FollowWaypoints' if args.execute else 'PREVIEW ONLY'}"
@@ -939,12 +1055,16 @@ def main() -> int:
     )
 
     grid_map = load_grid_map(args.map_yaml)
+    footprint = load_footprint(args.nav2_params)
     waypoints = filter_unsafe_waypoints(
         waypoints,
         grid_map,
+        footprint,
         args.clearance,
         not args.allow_unknown,
         args.unsafe_policy,
+        args.yaw_source,
+        args.body_to_base_yaw,
     )
 
     if len(waypoints) > args.max_waypoints:
@@ -1006,11 +1126,19 @@ def main() -> int:
         # ノイズ除去後の軌跡先頭をPlannerの開始姿勢にする。
         # --reverse指定時も、cleaned_samples[0]が逆走開始点になる。
         route_start = cleaned_samples[0]
+
+        # Use exactly the heading that will be sent to the Planner.
+        start_yaw = math.atan2(
+            waypoints[0].y - route_start.y,
+            waypoints[0].x - route_start.x,
+        )
         
         # 経路開始点そのものも地図上で安全か確認する。
         start_is_safe, start_reason = grid_map.clearance_check(
             route_start.x,
             route_start.y,
+            start_yaw,
+            footprint,
             args.clearance,
             not args.allow_unknown,
         )
@@ -1023,12 +1151,6 @@ def main() -> int:
                 f"y={route_start.y:.3f}: "
                 f"{start_reason}"
             )
-        
-        # 開始姿勢は最初のウェイポイント方向へ向ける。
-        start_yaw = math.atan2(
-            waypoints[0].y - route_start.y,
-            waypoints[0].x - route_start.x,
-        )
         
         start_pose = make_pose(
             navigator,
