@@ -81,11 +81,11 @@ Ouster LiDAR
 FAST-LIO2
  ├── /cloud_registered
  ├── /Odometry
- └── TF: odom -> body
+ └── TF: odom -> base_link
         ↓
 Static TF
- ├── body -> os_sensor
- └── body -> base_link
+ ├── base_link -> os_sensor
+ └── base_link -> laser
         ↓
 PointCloud to LaserScan
  └── /scan
@@ -127,11 +127,11 @@ Ouster LiDAR
 FAST-LIO2
  ├── /cloud_registered
  ├── /Odometry
- └── TF: odom -> body
+ └── TF: odom -> base_link
         ↓
 Static TF
- ├── body -> os_sensor
- └── body -> base_link
+ ├── base_link -> os_sensor
+ └── base_link -> base_link
         ↓
 PointCloud to LaserScan
  └── /scan
@@ -156,11 +156,11 @@ WHILL
 
 ```text
 odom
- └── body
-       ├── base_link
-       └── os_sensor
-             ├── os_lidar
-             └── os_imu
+ └── base_link
+       ├── os_sensor
+       │    ├── os_lidar
+       │    └── os_imu
+       └── laser  
 ```
 
 ### TF Tree with a Prior Map
@@ -168,11 +168,11 @@ odom
 ```text
 map
  └── odom
-       └── body
-             ├── base_link
-             └── os_sensor
-                   ├── os_lidar
-                   └── os_imu
+       └── base_link
+             ├── os_sensor
+             │    ├── os_lidar
+             │    └── os_imu
+             └── laser           
 ```
 
 各TFの配信元は以下の通りである．
@@ -180,17 +180,11 @@ map
 | TF | Publisher | Description |
 |---|---|---|
 | `map -> odom` | AMCL | 事前地図に対するFAST-LIO2オドメトリ座標系の補正 |
-| `odom -> body` | FAST-LIO2 | LiDAR-IMUオドメトリ |
-| `body -> base_link` | `static_transform_publisher` | Nav2用のWHILL基準座標系 |
-| `body -> os_sensor` | `static_transform_publisher` | Ouster取り付け位置 |
+| `odom -> base_link` | FAST-LIO2 | LiDAR-IMUオドメトリ，Nav2用のWHILL基準座標系 |
+| `base_link -> os_sensor` | `static_transform_publisher` | Ouster取り付け位置 |
+| `base_link -> laser` | `static_transform_publisher` | URG取り付け位置 |
 | `os_sensor -> os_lidar` | Ouster driver | LiDAR座標系 |
 | `os_sensor -> os_imu` | Ouster driver | IMU座標系 |
-
-本環境では，FAST-LIO2が出力する`body`の+x方向がWHILLの後方を向いていた．
-そのため，Nav2では`body`を直接`robot_base_frame`として使用せず，`base_link`を追加して使用する．
-
-- body の +x方向 = WHILL後方
-- base_link の +x方向 = WHILL前方
 
 ## Initial Setup
 
@@ -530,8 +524,6 @@ ros2 topic echo /whill/controller/cmd_vel
 ros2 run tf2_tools view_frames
 
 ros2 run tf2_ros tf2_echo map odom
-ros2 run tf2_ros tf2_echo odom body
-ros2 run tf2_ros tf2_echo body base_link
 ros2 run tf2_ros tf2_echo odom base_link
 ros2 run tf2_ros tf2_echo map base_link
 ```
