@@ -14,7 +14,7 @@ def generate_launch_description():
         name='pointcloud_to_laserscan',
         output='screen',
         remappings=[
-            ('cloud_in', '/ouster_points'),
+            ('cloud_in', '/ouster/points'),
             ('scan', '/scan_ouster'),
         ],
         parameters=[{
