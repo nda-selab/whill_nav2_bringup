@@ -131,7 +131,7 @@ FAST-LIO2
         ↓
 Static TF
  ├── base_link -> os_sensor
- └── base_link -> base_link
+ └── base_link -> laser
         ↓
 PointCloud to LaserScan
  └── /scan
@@ -489,9 +489,10 @@ ros2 run topic_tools relay \
 - Terminal 10: 実行
 
 ```bash
-python3 trajectory_waypoint_navigator.py \
+python3 scripts/trajectory_waypoint_navigator.py \
   --trajectory /home/selab/data/bikan_outdoor/odom.csv \
   --map-yaml /home/selab/ros2_ws/src/whill_nav2_bringup/maps/map.yaml \
+  --nav2-params config/nav2_params.yaml \
   --start-index 150 \
   --end-index 350 \
   --waypoint-spacing 0.80 \
@@ -500,6 +501,21 @@ python3 trajectory_waypoint_navigator.py \
   --plan-preview \
   --execute
 ```
+
+上のコマンドは本リポジトリのルートで実行する．`--nav2-params`には，
+Nav2起動時と同じ設定YAMLを指定する．省略時は本リポジトリの
+`config/nav2_params.yaml`を使用する．事前チェックではlocal_costmapの
+`footprint`と`footprint_padding`（省略時はNav2 Humbleと同じ0.01 m）を読み込み，
+各目標のyawで回転させた車体の内側と外周を地図上で確認する．
+
+`--clearance`は**車体の外周から追加で確保する距離**である．従来の
+「waypoint中心からの自由半径」とは意味が異なり，`--clearance 0.45`では
+車体外周からさらに0.45 mの余裕を要求する．追加余裕を付けずNav2の
+footprintとpaddingだけで確認する場合は`--clearance 0.0`を指定する．
+障害物セルは対角線の半分の半径を持つ円で覆って判定するため，セルの端や
+角の接触も検出する一方，地図解像度に応じて判定が少し保守的になる．
+このチェックは各目標姿勢と軌跡開始姿勢に対するものであり，区間全体の
+走行可否はPlannerによる経路検査と走行中のNav2の衝突判定で確認する．
 
 ## Topic Check
 
