@@ -62,6 +62,10 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             'urg_params_file',
+            default_value=(
+                '/home/selab/ros2_ws/src/'
+                'urg_node2/config/params_serial.yaml'
+            ),
             description='Absolute path to params_serial.yaml for urg_node2',
         ),
         pointcloud_to_laserscan,
