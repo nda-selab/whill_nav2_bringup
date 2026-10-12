@@ -39,6 +39,7 @@ def generate_launch_description():
             PathJoinSubstitution([
                 FindPackageShare('whill_nav2_bringup'),
                 'launch',
+                'components',
                 'static_tf.launch.py',
             ])
         )
@@ -66,14 +67,15 @@ def generate_launch_description():
     )
 
     # =========================================================
-    # 4. Points to Scan
+    # 4. URG
     # =========================================================
-    points_to_scan = IncludeLaunchDescription(
+    urg = IncludeLaunchDescription(
         AnyLaunchDescriptionSource(
             PathJoinSubstitution([
                 FindPackageShare('whill_nav2_bringup'),
                 'launch',
-                'points_to_scan.launch.py',
+                'components',
+                'urg.launch.py',
             ])
         ),
         launch_arguments={
@@ -118,6 +120,6 @@ def generate_launch_description():
         # Ouster
         ouster,
         
-        # Points to Scan
-        points_to_scan,
+        # URG
+        urg,
     ])

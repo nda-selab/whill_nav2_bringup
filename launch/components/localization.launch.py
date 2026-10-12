@@ -18,7 +18,11 @@ def generate_launch_description():
                 'launch',
                 'mapping.launch.py',
             ])
-        )
+        ),
+        launch_arguments={
+            'config_file': 'ouster64_indoor.yaml',
+            'rviz': 'false',
+        }.items(),
     )
 
     # =========================================================
