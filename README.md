@@ -2,107 +2,16 @@
 
 WHILLをROS 2 Humbleで制御し，Ouster LiDAR，FAST-LIO2，Nav2を組み合わせて自律走行を行うためのパッケージである．
 
-- [WHILL Nav2 Bringup](#whill-nav2-bringup)
-  - [Dependencies](#dependencies)
-    - [ROS 2 packages](#ros-2-packages)
-    - [WHILL ROS 2 driver](#whill-ros-2-driver)
-    - [Ouster ROS 2 driver](#ouster-ros-2-driver)
-    - [FAST-LIO2 ROS 2](#fast-lio2-ros-2)
-  - [Environment](#environment)
-  - [System Overview](#system-overview)
-  - [TF Configuration](#tf-configuration)
-    - [TF Tree without a Prior Map](#tf-tree-without-a-prior-map)
-    - [TF Tree with a Prior Map](#tf-tree-with-a-prior-map)
-  - [Initial Setup](#initial-setup)
-    - [Check user groups](#check-user-groups)
-  - [Manual Driving Test](#manual-driving-test)
-  - [Sensor and FAST-LIO2 Test](#sensor-and-fast-lio2-test)
-    - [Ouster Connection](#ouster-connection)
-  - [Navigation without a Prior Map](#navigation-without-a-prior-map)
-    - [Recommended Frames](#recommended-frames)
-    - [Launch Order](#launch-order)
-  - [Navigation Using a Prior Map](#navigation-using-a-prior-map)
-    - [Nav2 Frame Parameters](#nav2-frame-parameters)
-    - [Launch Order](#launch-order-1)
-  - [Topic Check](#topic-check)
-  - [TF Check](#tf-check)
-  - [Costmap Check](#costmap-check)
-
-
-## Dependencies
-
-### ROS 2 packages
-
-```bash
-sudo apt install \
-  ros-humble-navigation2 \
-  ros-humble-nav2-bringup \
-  ros-humble-nav2-simple-commander \
-  ros-humble-pointcloud-to-laserscan \
-  ros-humble-topic-tools \
-  ros-humble-joy \
-  ros-humble-tf2-tools \
-  python3-yaml
-```
-
-### WHILL ROS 2 driver
-
-- https://github.com/whill-labs/ros2_whill
-
-### Ouster ROS 2 driver
-
-- https://github.com/ouster-lidar/ouster-ros/tree/ros2
-
-### FAST-LIO2 ROS 2
-
-- https://github.com/Ericsii/FAST_LIO_ROS2
-
 ## Environment
 
-- Ubuntu 22.04
-- ROS 2 Humble
-- WHILL ROS 2 driver
-- Ouster ROS 2 driver
-- FAST-LIO2 ROS 2
-- Nav2
-- pointcloud_to_laserscan
-- topic_tools
-- joy
+| Item | Details |
+| --- | --- |
+| OS | Ubuntu 22.04 LTS |
+| ROS | ROS 2 Humble |
 
 ## System Overview
 
-1. Odometry-based Navigation without a Prior Map
-
-```text
-Ouster LiDAR
- ├── /ouster/points
- └── /ouster/imu
-        ↓
-FAST-LIO2
- ├── /cloud_registered
- ├── /Odometry
- └── TF: odom -> base_link
-        ↓
-Static TF
- ├── base_link -> os_sensor
- └── base_link -> laser
-        ↓
-PointCloud to LaserScan
- └── /scan
-        ↓
-Nav2
- └── /cmd_vel_nav
-        ↓
-velocity_smoother
- └── /cmd_vel
-        ↓
-topic_tools relay
- └── /whill/controller/cmd_vel
-        ↓
-WHILL
-```
-
-2. Navigation Using a Prior Map
+### Offline Map Preparation
 
 ```text
 Prior 3D Map
@@ -111,15 +20,23 @@ Prior 3D Map
 PCD to OccupancyGrid Conversion
  ├── map.pgm
  └── map.yaml
-        ↓
+```
+
+### Map-based Localization
+
+```text
 Map Server
  └── /map
         ↓
 AMCL
  ├── Input: /map
- ├── Input: /scan
+ ├── Input: /scan_ouster
  └── TF: map -> odom
+```
 
+### Real-time Localization
+
+```text
 Ouster LiDAR
  ├── /ouster/points
  └── /ouster/imu
@@ -127,18 +44,52 @@ Ouster LiDAR
 FAST-LIO2
  ├── /cloud_registered
  ├── /Odometry
+ ├── /odom_nav
  └── TF: odom -> base_link
-        ↓
-Static TF
- ├── base_link -> os_sensor
- └── base_link -> laser
+```
+
+### Obstacle Detection
+
+```text
+Ouster LiDAR
+ └── /ouster/points
         ↓
 PointCloud to LaserScan
- └── /scan
+ └── /scan_ouster
         ↓
+AMCL, Local Costmap, Global Costmap
+```
+
+```text
+Hokuyo URG
+        ↓
+urg_node2
+ └── /scan_urg
+        ↓
+Local Costmap
+```
+
+### Static TF
+
+```text
+base_link
+ ├── os_sensor
+ │     ├── os_lidar
+ │     └── os_imu
+ └── laser
+```
+
+### Navigation and Control
+
+```text
 Nav2
- ├── Global Planner
- ├── Controller
+ ├── Map / AMCL
+ ├── /odom_nav
+ ├── TF
+ ├── Global Costmap
+ └── Local Costmap
+        ↓
+Global Planner / Controller
  └── /cmd_vel_nav
         ↓
 velocity_smoother
@@ -150,208 +101,9 @@ topic_tools relay
 WHILL
 ```
 
-## TF Configuration
-
-### TF Tree without a Prior Map
-
-```text
-odom
- └── base_link
-       ├── os_sensor
-       │    ├── os_lidar
-       │    └── os_imu
-       └── laser  
-```
-
-### TF Tree with a Prior Map
-
-```text
-map
- └── odom
-       └── base_link
-             ├── os_sensor
-             │    ├── os_lidar
-             │    └── os_imu
-             └── laser           
-```
-
-各TFの配信元は以下の通りである．
-
-| TF | Publisher | Description |
-|---|---|---|
-| `map -> odom` | AMCL | 事前地図に対するFAST-LIO2オドメトリ座標系の補正 |
-| `odom -> base_link` | FAST-LIO2 | LiDAR-IMUオドメトリ，Nav2用のWHILL基準座標系 |
-| `base_link -> os_sensor` | `static_transform_publisher` | Ouster取り付け位置 |
-| `base_link -> laser` | `static_transform_publisher` | URG取り付け位置 |
-| `os_sensor -> os_lidar` | Ouster driver | LiDAR座標系 |
-| `os_sensor -> os_imu` | Ouster driver | IMU座標系 |
-
-## Initial Setup
-
-### Check user groups
-
-WHILLをUSBシリアル経由で制御する場合，
-ユーザが`dialout`グループに所属している必要がある．
-
-```bash
-groups
-```
-
-`dialout`が含まれていない場合は以下を実行，
-ログアウト・再ログインする．
-
-```bash
-sudo usermod -aG dialout $USER
-```
-
-## Manual Driving Test
-
-- Terminal 1: WHILL
-
-```bash
-ros2 launch whill_bringup whill_launch.py
-```
-
-- Terminal 2: Joystick
-
-```bash
-ros2 run joy joy_node --ros-args \
-  -p device_id:=0 \
-  -p deadzone:=0.05 \
-  -p autorepeat_rate:=20.0 \
-  -r /joy:=/whill/controller/joy
-```
-
-ジョイスティックでWHILLを操作できることを確認する．
-
-## Sensor and FAST-LIO2 Test
-
-### Ouster Connection
-
-```bash
-ping -c 3 169.254.185.67
-ip addr
-```
-
-- Terminal 1: Ouster
-
-```bash
-ros2 launch ouster_ros sensor.launch.xml \
-  sensor_hostname:=169.254.185.67 \
-  point_type:=original \
-  timestamp_mode:=TIME_FROM_ROS_TIME \
-  lidar_port:=7502 \
-  imu_port:=7503 \
-  viz:=false
-```
-
-- Terminal 2: FAST-LIO2
-
-```bash
-ros2 launch fast_lio mapping.launch.py
-```
-
-## Navigation without a Prior Map
-
-### Recommended Frames
-
-```yaml
-bt_navigator:
-  ros__parameters:
-    global_frame: odom
-    robot_base_frame: base_link
-    odom_topic: /Odometry
-
-local_costmap:
-  local_costmap:
-    ros__parameters:
-      global_frame: odom
-      robot_base_frame: base_link
-      rolling_window: true
-
-global_costmap:
-  global_costmap:
-    ros__parameters:
-      global_frame: odom
-      robot_base_frame: base_link
-      rolling_window: true
-
-behavior_server:
-  ros__parameters:
-    global_frame: odom
-    robot_base_frame: base_link
-```
-
-### Launch Order
-
-1. Ouster
-2. FAST-LIO2
-3. Static TF
-4. PointCloud to LaserScan
-5. WHILL driver
-6. Nav2
-7. RViz
-8. Relay
-
-- Terminal 1: Ouster
-
-```bash
-ros2 launch ouster_ros sensor.launch.xml \
-  sensor_hostname:=169.254.185.67 \
-  point_type:=original \
-  timestamp_mode:=TIME_FROM_ROS_TIME \
-  lidar_port:=7502 \
-  imu_port:=7503 \
-  viz:=false
-```
-  
-- Terminal 2: FAST-LIO2
-
-```bash
-ros2 launch fast_lio mapping.launch.py
-```
-
-- Terminal 3: Static TF
-
-```bash
-ros2 launch whill_nav2_bringup static_tf.launch.py
-```
-
-- Terminal 4: PointCloud to LaserScan
-
-```bash
-ros2 launch whill_nav2_bringup points_to_scan.launch.py
-```
-
-- Terminal 5: WHILL
-
-```bash
-ros2 launch whill_bringup whill_launch.py
-```
-
-- Terminal 6: Nav2
-
-```bash
-ros2 launch whill_nav2_bringup whill_nav2.launch.py
-```
-
-- Terminal 7: RViz
-
-```bash
-rviz2
-```
-
-- Terminal 8: Relay
-
-```bash
-ros2 run topic_tools relay \
-  /cmd_vel \
-  /whill/controller/cmd_vel
-```
-
-## Navigation Using a Prior Map
-
 ### Nav2 Frame Parameters
+
+Nav2の詳細な設定パラメータはconfig/nav2_params.yamlを参照する．
 
 ```yaml
 amcl:
@@ -359,14 +111,14 @@ amcl:
     global_frame_id: map
     odom_frame_id: odom
     base_frame_id: base_link
-    scan_topic: scan
+    scan_topic: /scan_ouster
     tf_broadcast: true
 
 bt_navigator:
   ros__parameters:
     global_frame: map
     robot_base_frame: base_link
-    odom_topic: /Odometry
+    odom_topic: /odom_nav
 
 global_costmap:
   global_costmap:
@@ -389,20 +141,20 @@ behavior_server:
     robot_base_frame: base_link
 ```
 
-### Launch Order
+### Integrated Bringup
+
+```bash
+ros2 launch whill_nav2_bringup autonomous_navigation.launch.py
+```
+
+起動後，RVizの「2D Pose Estimate」からロボットの初期位置・姿勢を設定する．
+`map → odom`のTFが配信され，Nav2の自己位置が正常に取得できることを確認してから自律走行を開始する．
+
+### Individual Launch Commands (Debugging)
+
+統合起動とは併用しない．
 
 1. Ouster
-2. FAST-LIO2
-3. Static TF
-4. PointCloud to LaserScan
-5. Nav2, Map Server, AMCL
-6. RViz
-7. AMCL初期位置姿勢設定
-8. WHILL driver
-9. Relay
-10. 実行
-
-- Terminal 1: Ouster
 
 ```bash
 ros2 launch ouster_ros sensor.launch.xml \
@@ -413,72 +165,52 @@ ros2 launch ouster_ros sensor.launch.xml \
   imu_port:=7503 \
   viz:=false
 ```
-  
-- Terminal 2: FAST-LIO2
+
+2. URG
 
 ```bash
-ros2 launch fast_lio mapping.launch.py
+ros2 launch whill_nav2_bringup urg.launch.py
 ```
 
-- Terminal 3: Static TF
+3. FAST-LIO2
+
+```bash
+ros2 launch fast_lio mapping.launch.py \
+  config_file:=ouster64_indoor.yaml \
+  rviz:=false
+```
+
+4. Static TF
 
 ```bash
 ros2 launch whill_nav2_bringup static_tf.launch.py
 ```
 
-- Terminal 4: PointCloud to LaserScan
+5. PointCloud to LaserScan
 
 ```bash
 ros2 launch whill_nav2_bringup points_to_scan.launch.py
 ```
 
-- Terminal 5: Nav2
+6. Nav2, Map Server, AMCL
 
 ```bash
 ros2 launch whill_nav2_bringup whill_nav2.launch.py
 ```
 
-- Terminal 6: RViz
+7. RViz
 
 ```bash
-rviz2 -d \
-  /opt/ros/humble/share/nav2_bringup/rviz/nav2_default_view.rviz
+ros2 launch whill_nav2_bringup visualization.launch.py
 ```
 
-- Terminal 7: AMCL初期位置姿勢設定
-
-```bash
-ros2 topic pub --once \
-  /initialpose \
-  geometry_msgs/msg/PoseWithCovarianceStamped \
-"{
-  header: {
-    frame_id: 'map'
-  },
-  pose: {
-    pose: {
-      position: {x: 0.0, y: 0.0, z: 0.0},
-      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
-    },
-    covariance: [
-      0.25, 0.0, 0.0, 0.0, 0.0, 0.0,
-      0.0, 0.25, 0.0, 0.0, 0.0, 0.0,
-      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-      0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-      0.0, 0.0, 0.0, 0.0, 0.0, 0.0685
-    ]
-  }
-}"
-```
-
-- Terminal 8: WHILL
+8. WHILL driver
 
 ```bash
 ros2 launch whill_bringup whill_launch.py
 ```
 
-- Terminal 9: Relay
+9.  Relay
 
 ```bash
 ros2 run topic_tools relay \
@@ -486,7 +218,9 @@ ros2 run topic_tools relay \
   /whill/controller/cmd_vel
 ```
 
-- Terminal 10: 実行
+### Waypoint Navigation
+
+10. 実行
 
 ```bash
 python3 scripts/trajectory_waypoint_navigator.py \
@@ -498,55 +232,13 @@ python3 scripts/trajectory_waypoint_navigator.py \
   --waypoint-spacing 0.80 \
   --corner-angle-deg 15.0 \
   --clearance 0.45 \
-  --plan-preview \
-  --execute
+  --plan-preview
 ```
 
-上のコマンドは本リポジトリのルートで実行する．`--nav2-params`には，
-Nav2起動時と同じ設定YAMLを指定する．省略時は本リポジトリの
-`config/nav2_params.yaml`を使用する．事前チェックではlocal_costmapの
-`footprint`と`footprint_padding`（省略時はNav2 Humbleと同じ0.01 m）を読み込み，
-各目標のyawで回転させた車体の内側と外周を地図上で確認する．
+安全確認後，`--execute`を指定すると，実走行を開始する．
 
-`--clearance`は**車体の外周から追加で確保する距離**である．従来の
-「waypoint中心からの自由半径」とは意味が異なり，`--clearance 0.45`では
-車体外周からさらに0.45 mの余裕を要求する．追加余裕を付けずNav2の
-footprintとpaddingだけで確認する場合は`--clearance 0.0`を指定する．
-障害物セルは対角線の半分の半径を持つ円で覆って判定するため，セルの端や
-角の接触も検出する一方，地図解像度に応じて判定が少し保守的になる．
-このチェックは各目標姿勢と軌跡開始姿勢に対するものであり，区間全体の
-走行可否はPlannerによる経路検査と走行中のNav2の衝突判定で確認する．
+## Documentation
 
-## Topic Check
-
-```bash
-ros2 topic list | grep ouster
-
-ros2 topic info /cloud_registered -v
-ros2 topic info /scan -v
-ros2 topic info /map -v
-
-ros2 topic echo /Odometry --once
-ros2 topic echo /amcl_pose --once
-
-ros2 topic echo /cmd_vel_nav
-ros2 topic echo /cmd_vel
-ros2 topic echo /whill/controller/cmd_vel
-```
-
-## TF Check
-
-```bash
-ros2 run tf2_tools view_frames
-
-ros2 run tf2_ros tf2_echo map odom
-ros2 run tf2_ros tf2_echo odom base_link
-ros2 run tf2_ros tf2_echo map base_link
-```
-
-## Costmap Check
-
-```bash
-ros2 topic echo /global_costmap/costmap --once --field header
-ros2 topic echo /local_costmap/costmap --once --field header
-```
+- [Installation](doc/installation.md)
+- [TF Configuration](doc/tf.md)
+- [Troubleshooting](doc/troubleshooting.md)
