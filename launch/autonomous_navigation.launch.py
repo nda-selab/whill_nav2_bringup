@@ -2,8 +2,6 @@ from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
     IncludeLaunchDescription,
-    ExecuteProcess,
-    RegisterEventHandler,
     TimerAction,
 )
 from launch.conditions import IfCondition
@@ -15,7 +13,6 @@ from launch.substitutions import (
 
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
-from launch.event_handlers import OnProcessExit
 
 def generate_launch_description():
 
@@ -100,43 +97,7 @@ def generate_launch_description():
         launch_arguments={
             'urg_params_file': urg_params_file,
         }.items(),
-    )
-    
-    # =========================================================
-    # URG Lifecycle
-    # =========================================================
-
-    urg_configure = ExecuteProcess(
-        cmd=[
-            'ros2',
-            'lifecycle',
-            'set',
-            '/urg_node2',
-            'configure',
-        ],
-        output='screen',
-    )
-
-    urg_activate = ExecuteProcess(
-        cmd=[
-            'ros2',
-            'lifecycle',
-            'set',
-            '/urg_node2',
-            'activate',
-        ],
-        output='screen',
-    )
-
-    activate_urg_after_configure = RegisterEventHandler(
-        OnProcessExit(
-            target_action=urg_configure,
-            on_exit=[
-                urg_activate,
-            ],
-        )
-    )
-    
+    )    
     
     # =========================================================
     # 6. /cmd_vel -> WHILL
@@ -232,17 +193,6 @@ def generate_launch_description():
             period=8.0,
             actions=[
                 points_to_scan,
-            ],
-        ),
-
-        # configure完了後にactivateを実行するためのイベント
-        activate_urg_after_configure,
-
-        # 10 s
-        TimerAction(
-            period=10.0,
-            actions=[
-                urg_configure,
             ],
         ),
         
