@@ -11,52 +11,47 @@ def generate_launch_description():
     map_yaml = LaunchConfiguration("map")
     params_file = LaunchConfiguration("params_file")
 
-    nav2_bringup_launch = PathJoinSubstitution([
-        FindPackageShare("nav2_bringup"),
-        "launch",
-        "bringup_launch.py",
+    default_map = PathJoinSubstitution([
+        FindPackageShare('whill_nav2_bringup'), 'maps', 'map.yaml',
+    ])
+    default_params = PathJoinSubstitution([
+        FindPackageShare('whill_nav2_bringup'), 'config', 'nav2_params.yaml',
     ])
 
-    default_map_yaml = PathJoinSubstitution([
-        FindPackageShare("whill_nav2_bringup"),
-        "maps",
-        "map.yaml",
-    ])
+    localization = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(PathJoinSubstitution([
+            FindPackageShare('nav2_bringup'),
+            'launch',
+            'localization_launch.py',
+        ])),
+        launch_arguments={
+            'namespace': '',
+            'map': map_yaml,
+            'params_file': params_file,
+            'use_sim_time': use_sim_time,
+            'autostart': 'true',
+            'use_composition': 'False',
+        }.items(),
+    )
 
-    default_params_file = PathJoinSubstitution([
-        FindPackageShare("whill_nav2_bringup"),
-        "config",
-        "nav2_params.yaml",
-    ])
-    
+    navigation = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(PathJoinSubstitution([
+            FindPackageShare('whill_nav2_bringup'),
+            'launch',
+            'components',
+            'whill_navigation.launch.py',
+        ])),
+        launch_arguments={
+            'params_file': params_file,
+            'use_sim_time': use_sim_time,
+            'autostart': 'true',
+        }.items(),
+    )
+
     return LaunchDescription([
-        DeclareLaunchArgument(
-            "use_sim_time",
-            default_value="false",
-            description="Use simulation clock",
-        ),
-
-        DeclareLaunchArgument(
-            "map",
-            default_value=default_map_yaml,
-            description="Path to the Nav2 occupancy grid map YAML",
-        ),
-
-        DeclareLaunchArgument(
-            "params_file",
-            default_value=default_params_file,
-            description="Path to the Nav2 parameter file",
-        ),
-
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(nav2_bringup_launch),
-            launch_arguments={
-                "use_sim_time": use_sim_time,
-                "map": map_yaml,
-                "params_file": params_file,
-                "autostart": "true",
-                "slam": "False",
-            }.items(),
-        ),
+        DeclareLaunchArgument('use_sim_time', default_value='false'),
+        DeclareLaunchArgument('map', default_value=default_map),
+        DeclareLaunchArgument('params_file', default_value=default_params),
+        localization,
+        navigation,
     ])
-
