@@ -241,7 +241,12 @@ behavior_server:
     costmap_topic: local_costmap/costmap_raw
     footprint_topic: local_costmap/published_footprint
     cycle_frequency: 10.0
+
     behavior_plugins: ["spin", "backup", "wait"]
+
+    max_rotational_vel: 0.5
+    min_rotational_vel: 0.2
+    rotational_acc_lim: 0.5
 
     spin:
       plugin: "nav2_behaviors/Spin"
@@ -267,4 +272,4 @@ velocity_smoother:
     odom_topic: /odom_nav
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]
-    velocity_timeout: 1.0
+    velocity_timeout: 0.5
