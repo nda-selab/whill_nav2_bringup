@@ -23,18 +23,22 @@ def generate_launch_description():
     )
 
     # =========================================================
-    # 2. Nav2 velocity command -> WHILL
+    # 2. 速度監視
     # =========================================================
-    cmd_vel_relay = Node(
-        package='topic_tools',
-        executable='relay',
-        name='cmd_vel_to_whill_relay',
+    cmd_vel_watchdog = Node(
+        package='whill_nav2_bringup',
+        executable='whill_cmd_vel_watchdog.py',
+        name='whill_cmd_vel_watchdog',
         output='screen',
-
-        arguments=[
-            '/cmd_vel',
-            '/whill/controller/cmd_vel',
-        ],
+        parameters=[{
+            'input_topic': '/cmd_vel',
+            'output_topic': '/whill/controller/cmd_vel',
+            'command_timeout_sec': 0.4,
+            'publish_frequency': 20.0,
+            'max_forward_speed': 0.25,
+            'max_reverse_speed': 0.15,
+            'max_angular_speed': 0.5,
+        }],
     )
     
     # =========================================================
@@ -56,6 +60,6 @@ def generate_launch_description():
     # =========================================================
     return LaunchDescription([
         points_to_scan,
-        cmd_vel_relay,
+        cmd_vel_watchdog,
         nav2,
     ])
