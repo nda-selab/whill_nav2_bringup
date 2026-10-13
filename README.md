@@ -43,9 +43,11 @@ Ouster LiDAR
         ↓
 FAST-LIO2
  ├── /cloud_registered
- ├── /Odometry
+ └── /Odometry
+         ↓
+odom_to_base_link
  ├── /odom_nav
- └── TF: odom -> base_link
+ └── odom -> base_link
 ```
 
 ### Obstacle Detection
@@ -83,23 +85,39 @@ base_link
 
 ```text
 Nav2
- ├── Map / AMCL
- ├── /odom_nav
- ├── TF
- ├── Global Costmap
- └── Local Costmap
+ ├── Controller Server (Normal Navigation)
+ └── Behavior Server (Recovery)
         ↓
-Global Planner / Controller
- └── /cmd_vel_nav
+/cmd_vel_nav
         ↓
 velocity_smoother
- └── /cmd_vel
         ↓
-topic_tools relay
- └── /whill/controller/cmd_vel
+/cmd_vel
         ↓
-WHILL
+WHILL CmdVel Watchdog
+        ↓
+/whill/controller/cmd_vel
+        ↓
+WHILL Driver
 ```
+
+### Velocity Command Safety
+
+通常走行（Controller Server）と復帰動作（Behavior Server）の速度指令は、いずれも`/cmd_vel_nav`を経由してVelocity Smootherに入力する。
+
+WHILL CmdVel Watchdogは、平滑化後の`/cmd_vel`を監視し、以下の制限を適用する。
+
+| Parameter | Value |
+|---|---|
+| Maximum forward velocity | 0.25 m/s |
+| Maximum reverse velocity | 0.15 m/s |
+| Maximum angular velocity | 0.5 rad/s |
+| Command timeout | 0.4 s |
+| Output frequency | 20 Hz |
+
+指令受信がタイムアウトした場合、Watchdogはゼロ速度指令を出力する。
+
+ただし、Watchdog自身の停止、ROS 2通信断、WHILLドライバの異常時には停止を保証できない。WHILL本体またはドライバ側の独立した停止機構が必要である。
 
 ### Nav2 Frame Parameters
 
@@ -212,14 +230,6 @@ ros2 launch whill_nav2_bringup visualization.launch.py
 
 ```bash
 ros2 launch whill_bringup whill_launch.py
-```
-
-9.  Relay
-
-```bash
-ros2 run topic_tools relay \
-  /cmd_vel \
-  /whill/controller/cmd_vel
 ```
 
 ### Waypoint Navigation
