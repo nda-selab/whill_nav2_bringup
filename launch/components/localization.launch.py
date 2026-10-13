@@ -20,7 +20,7 @@ def generate_launch_description():
             ])
         ),
         launch_arguments={
-            'config_file': 'ouster64_indoor.yaml',
+            'config_file': 'os2_64.yaml',
             'rviz': 'false',
         }.items(),
     )
