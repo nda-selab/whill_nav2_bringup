@@ -10,4 +10,11 @@ install(DIRECTORY
   DESTINATION share/${PROJECT_NAME}
 )
 
+install(PROGRAMS
+  scripts/odom_to_base_link.py
+  scripts/trajectory_waypoint_navigator.py
+  scripts/twist_to_whill_joy.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 ament_package()

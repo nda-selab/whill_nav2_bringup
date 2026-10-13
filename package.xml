@@ -8,11 +8,36 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
+  <!-- ROS 2 Launch -->
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+
+  <!-- ROS 2 Messages and TF -->
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+
+  <!-- Python Libraries -->
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+
+  <!-- Localization -->
+  <exec_depend>fast_lio</exec_depend>
+  <exec_depend>ouster_ros</exec_depend>
   <exec_depend>pointcloud_to_laserscan</exec_depend>
+
+  <!-- Navigation -->
   <exec_depend>nav2_bringup</exec_depend>
+  <exec_depend>nav2_simple_commander</exec_depend>
   <exec_depend>lifecycle_msgs</exec_depend>
+
+  <!-- WHILL Hardware and Control -->
+  <exec_depend>whill_bringup</exec_depend>
+  <exec_depend>urg_node2</exec_depend>
+  <exec_depend>topic_tools</exec_depend>
   
   <export>
     <build_type>ament_cmake</build_type>
