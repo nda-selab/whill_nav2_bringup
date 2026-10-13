@@ -176,9 +176,13 @@ ros2 launch whill_nav2_bringup urg.launch.py
 
 ```bash
 ros2 launch fast_lio mapping.launch.py \
-  config_file:=ouster64_indoor.yaml \
+  config_file:=os2_64.yaml \
   rviz:=false
 ```
+
+- 標準設定：`os2_64.yaml`
+- 屋内環境設定：`os2_64_indoor.yaml`
+- 屋外環境設定：`os2_64_outdoor.yaml`
 
 4. Static TF
 
