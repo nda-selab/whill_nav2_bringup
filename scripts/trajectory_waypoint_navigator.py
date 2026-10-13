@@ -35,6 +35,7 @@ from rclpy.qos import (
 )
 import yaml
 
+from ament_index_python.packages import get_package_share_directory
 
 REQUIRED_COLUMNS = (
     "p_w_b_x",
@@ -46,8 +47,11 @@ REQUIRED_COLUMNS = (
 )
 
 Footprint = tuple[tuple[float, float], ...]
-DEFAULT_NAV2_PARAMS = Path(__file__).resolve().parents[1] / "config/nav2_params.yaml"
-
+DEFAULT_NAV2_PARAMS = (
+    Path(get_package_share_directory("whill_nav2_bringup"))
+    / "config"
+    / "nav2_params.yaml"
+)
 
 def distance_to_polygon(x: float, y: float, polygon: Footprint) -> float:
     """Distance to a filled convex polygon, including its boundary."""
