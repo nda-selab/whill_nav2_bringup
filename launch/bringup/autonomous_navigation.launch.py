@@ -1,7 +1,7 @@
 from launch import LaunchDescription
 from launch.actions import (DeclareLaunchArgument, IncludeLaunchDescription, TimerAction)
 from launch.launch_description_sources import AnyLaunchDescriptionSource
-from launch.substitutions import (PathJoinSubstitution)
+from launch.substitutions import (LaunchConfiguration, PathJoinSubstitution)
 from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
@@ -17,7 +17,11 @@ def generate_launch_description():
                 'bringup',
                 'hardware_bringup.launch.py',
             ])
-        )
+        ),
+        launch_arguments={
+            'os2_64_params_file': LaunchConfiguration('os2_64_params_file'),
+            'urg_params_file': LaunchConfiguration('urg_params_file'),
+        }.items(),
     )
 
     # =========================================================
@@ -59,7 +63,10 @@ def generate_launch_description():
                 'components',
                 'visualization.launch.py',
             ])
-        )
+        ),
+        launch_arguments={
+            'use_rviz': LaunchConfiguration('use_rviz'),
+        }.items(),
     )
 
     # =========================================================
@@ -68,9 +75,13 @@ def generate_launch_description():
     return LaunchDescription([
 
         DeclareLaunchArgument(
-            'sensor_hostname',
-            default_value='os-992029000281.local',
-            description='Ouster sensor hostname',
+            'os2_64_params_file',
+            default_value=PathJoinSubstitution([
+                FindPackageShare('whill_nav2_bringup'),
+                'config',
+                'os2_64_params.yaml',
+            ]),
+            description='OS2-64 parameter YAML file',
         ),
 
         DeclareLaunchArgument(
