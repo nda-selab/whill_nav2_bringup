@@ -49,7 +49,11 @@ def generate_launch_description():
                 'bringup',
                 'navigation_bringup.launch.py',
             ])
-        )
+        ),
+        launch_arguments={
+            'nav2_params_file': LaunchConfiguration('nav2_params_file'),
+            'cmd_vel_watchdog_params_file': LaunchConfiguration('cmd_vel_watchdog_params_file'),
+        }.items(),
     )
 
     # =========================================================
@@ -92,6 +96,26 @@ def generate_launch_description():
                 'urg_params.yaml',
             ]),
             description='URG parameter YAML file',
+        ),
+
+        DeclareLaunchArgument(
+            'nav2_params_file',
+            default_value=PathJoinSubstitution([
+                FindPackageShare('whill_nav2_bringup'),
+                'config',
+                'nav2_params.yaml',
+            ]),
+            description='Nav2 parameter YAML file',
+        ),
+
+        DeclareLaunchArgument(
+            'cmd_vel_watchdog_params_file',
+            default_value=PathJoinSubstitution([
+                FindPackageShare('whill_nav2_bringup'),
+                'config',
+                'cmd_vel_watchdog_params.yaml',
+            ]),
+            description='CmdVel Watchdog parameter YAML file',
         ),
 
         DeclareLaunchArgument(
