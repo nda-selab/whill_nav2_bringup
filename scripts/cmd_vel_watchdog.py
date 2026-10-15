@@ -8,15 +8,13 @@ from geometry_msgs.msg import Twist
 from rclpy.node import Node
 
 
-class WhillCmdVelWatchdog(Node):
+class CmdVelWatchdog(Node):
 
     def __init__(self):
-        super().__init__('whill_cmd_vel_watchdog')
+        super().__init__('cmd_vel_watchdog')
 
         self.declare_parameter('input_topic', '/cmd_vel')
-        self.declare_parameter(
-            'output_topic', '/whill/controller/cmd_vel'
-        )
+        self.declare_parameter('output_topic', '/whill/controller/cmd_vel')
         self.declare_parameter('command_timeout_sec', 0.4)
         self.declare_parameter('publish_frequency', 20.0)
         self.declare_parameter('max_forward_speed', 0.25)
@@ -131,7 +129,7 @@ def main(args=None):
     node = None
 
     try:
-        node = WhillCmdVelWatchdog()
+        node = CmdVelWatchdog()
         rclpy.spin(node)
 
     except KeyboardInterrupt:

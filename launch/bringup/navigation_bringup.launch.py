@@ -24,20 +24,18 @@ def generate_launch_description():
     # =========================================================
     # 2. 速度監視
     # =========================================================
+    cmd_vel_watchdog_params = PathJoinSubstitution([
+        FindPackageShare('whill_nav2_bringup'),
+        'config',
+        'cmd_vel_watchdog_params.yaml',
+    ])
+
     cmd_vel_watchdog = Node(
         package='whill_nav2_bringup',
-        executable='whill_cmd_vel_watchdog.py',
-        name='whill_cmd_vel_watchdog',
+        executable='cmd_vel_watchdog.py',
+        name='cmd_vel_watchdog',
         output='screen',
-        parameters=[{
-            'input_topic': '/cmd_vel',
-            'output_topic': '/whill/controller/cmd_vel',
-            'command_timeout_sec': 0.4,
-            'publish_frequency': 20.0,
-            'max_forward_speed': 0.25,
-            'max_reverse_speed': 0.15,
-            'max_angular_speed': 0.5,
-        }],
+        parameters=[cmd_vel_watchdog_params],
     )
     
     # =========================================================
