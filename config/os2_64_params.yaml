@@ -1,0 +1,18 @@
+ouster/os_driver:
+  ros__parameters:
+    sensor_hostname: os-992029000281.local
+
+    lidar_port: 7502
+    imu_port: 7503
+
+    timestamp_mode: TIME_FROM_ROS_TIME
+    point_type: original
+
+    sensor_frame: os_sensor
+    lidar_frame: os_lidar
+    imu_frame: os_imu
+    point_cloud_frame: os_lidar
+    pub_static_tf: true
+
+    organized: true
+    destagger: true

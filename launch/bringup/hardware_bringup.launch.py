@@ -10,12 +10,6 @@ from launch_ros.substitutions import FindPackageShare
 def generate_launch_description():
 
     # =========================================================
-    # Launch arguments
-    # =========================================================
-    sensor_hostname = LaunchConfiguration('sensor_hostname')
-    urg_params_file = LaunchConfiguration('urg_params_file')
-
-    # =========================================================
     # 1. WHILL driver
     # =========================================================
     whill_bringup = IncludeLaunchDescription(
@@ -48,21 +42,17 @@ def generate_launch_description():
     # =========================================================
     # 3. Ouster OS2-64
     # =========================================================
-    ouster = IncludeLaunchDescription(
+    os2_64 = IncludeLaunchDescription(
         AnyLaunchDescriptionSource(
             PathJoinSubstitution([
-                FindPackageShare('ouster_ros'),
+                FindPackageShare('whill_nav2_bringup'),
                 'launch',
-                'sensor.launch.xml',
+                'components',
+                'os2_64.launch.py',
             ])
         ),
         launch_arguments={
-            'sensor_hostname': sensor_hostname,
-            'point_type': 'original',
-            'timestamp_mode': 'TIME_FROM_ROS_TIME',
-            'lidar_port': '7502',
-            'imu_port': '7503',
-            'viz': 'false',
+            'os2_64_params_file': LaunchConfiguration('os2_64_params_file'),
         }.items(),
     )
 
@@ -79,7 +69,7 @@ def generate_launch_description():
             ])
         ),
         launch_arguments={
-            'urg_params_file': urg_params_file,
+            'urg_params_file': LaunchConfiguration('urg_params_file'),
         }.items(),
     )
 
@@ -92,9 +82,13 @@ def generate_launch_description():
         # Arguments
         # -----------------------------------------------------
         DeclareLaunchArgument(
-            'sensor_hostname',
-            default_value='os-992029000281.local',
-            description='Ouster sensor hostname',
+            'os2_64_params_file',
+            default_value=PathJoinSubstitution([
+                            FindPackageShare('whill_nav2_bringup'),
+                            'config',
+                            'os2_64_params.yaml',
+                        ]),
+            description='OS2-64 parameter YAML file',
         ),
 
         DeclareLaunchArgument(
@@ -107,19 +101,8 @@ def generate_launch_description():
             description='URG parameter YAML file',
         ),
         
-        # -----------------------------------------------------
-        # Hardware
-        # -----------------------------------------------------
-
-        # WHILL
         whill_bringup,
-        
-        # Static TF
         static_tf,
-
-        # Ouster
-        ouster,
-        
-        # URG
+        os2_64,
         urg,
     ])
