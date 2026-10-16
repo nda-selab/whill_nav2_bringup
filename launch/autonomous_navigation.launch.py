@@ -3,29 +3,73 @@ from launch.actions import (DeclareLaunchArgument, IncludeLaunchDescription, Tim
 from launch.launch_description_sources import AnyLaunchDescriptionSource
 from launch.substitutions import (LaunchConfiguration, PathJoinSubstitution)
 from launch_ros.substitutions import FindPackageShare
+from launch_ros.actions import Node
 
 def generate_launch_description():
 
     # =========================================================
-    # 1. Hardware bringup
+    # WHILL Driver
     # =========================================================
-    hardware_bringup = IncludeLaunchDescription(
+    whill_driver = IncludeLaunchDescription(
+        AnyLaunchDescriptionSource(
+            PathJoinSubstitution([
+                FindPackageShare('whill_bringup'),
+                'launch',
+                'whill_launch.py',
+            ])
+        ),
+    )
+
+    # =========================================================
+    # Static TF
+    # =========================================================
+    static_tf = IncludeLaunchDescription(
         AnyLaunchDescriptionSource(
             PathJoinSubstitution([
                 FindPackageShare('whill_nav2_bringup'),
                 'launch',
-                'bringup',
-                'hardware_bringup.launch.py',
+                'components',
+                'static_tf.launch.py',
+            ])
+        )
+    )
+
+    # =========================================================
+    # Ouster OS2-64
+    # =========================================================
+    os2_64 = IncludeLaunchDescription(
+        AnyLaunchDescriptionSource(
+            PathJoinSubstitution([
+                FindPackageShare('whill_nav2_bringup'),
+                'launch',
+                'components',
+                'os2_64.launch.py',
             ])
         ),
         launch_arguments={
             'os2_64_params_file': LaunchConfiguration('os2_64_params_file'),
+        }.items(),
+    )
+
+    # =========================================================
+    # Hokuyo URG
+    # =========================================================
+    urg = IncludeLaunchDescription(
+        AnyLaunchDescriptionSource(
+            PathJoinSubstitution([
+                FindPackageShare('whill_nav2_bringup'),
+                'launch',
+                'components',
+                'urg.launch.py',
+            ])
+        ),
+        launch_arguments={
             'urg_params_file': LaunchConfiguration('urg_params_file'),
         }.items(),
     )
 
     # =========================================================
-    # 2. Localization
+    # Localization
     # =========================================================
     localization = IncludeLaunchDescription(
         AnyLaunchDescriptionSource(
@@ -43,26 +87,53 @@ def generate_launch_description():
     )
 
     # =========================================================
-    # 3. Navigation bringup
+    # PointCloud to LaserScan
     # =========================================================
-    navigation_bringup = IncludeLaunchDescription(
+    pointcloud_to_laserscan = IncludeLaunchDescription(
         AnyLaunchDescriptionSource(
             PathJoinSubstitution([
                 FindPackageShare('whill_nav2_bringup'),
                 'launch',
-                'bringup',
-                'navigation_bringup.launch.py',
+                'components',
+                'pointcloud_to_laserscan.launch.py',
             ])
         ),
         launch_arguments={
-            'pointcloud_to_laserscan_params_file': LaunchConfiguration('pointcloud_to_laserscan_params_file'),
-            'nav2_params_file': LaunchConfiguration('nav2_params_file'),
-            'cmd_vel_watchdog_params_file': LaunchConfiguration('cmd_vel_watchdog_params_file'),
+            'pointcloud_to_laserscan_params_file':
+                LaunchConfiguration('pointcloud_to_laserscan_params_file'),
         }.items(),
     )
 
     # =========================================================
-    # 4. Visualization
+    # 速度監視
+    # =========================================================
+    cmd_vel_watchdog = Node(
+        package='whill_nav2_bringup',
+        executable='cmd_vel_watchdog.py',
+        name='cmd_vel_watchdog',
+        output='screen',
+        parameters=[LaunchConfiguration('cmd_vel_watchdog_params_file')],
+    )
+    
+    # =========================================================
+    # Nav2
+    # =========================================================
+    nav2 = IncludeLaunchDescription(
+        AnyLaunchDescriptionSource(
+            PathJoinSubstitution([
+                FindPackageShare('whill_nav2_bringup'),
+                'launch',
+                'components',
+                'whill_nav2.launch.py',
+            ])
+        ),
+        launch_arguments={
+            'params_file': LaunchConfiguration('nav2_params_file'),
+        }.items(),
+    )
+
+    # =========================================================
+    # Visualization
     # =========================================================
     visualization = IncludeLaunchDescription(
         AnyLaunchDescriptionSource(
@@ -153,8 +224,22 @@ def generate_launch_description():
             ]),
         ),
 
-        hardware_bringup,
-        TimerAction(period=5.0, actions=[localization]),
-        TimerAction(period=10.0, actions=[navigation_bringup]),
-        TimerAction(period=13.0, actions=[visualization]),
+        whill_driver,
+        static_tf,
+        os2_64,
+        urg,
+
+        TimerAction(period=5.0, actions=[
+            localization,
+        ]),
+
+        TimerAction(period=10.0, actions=[
+            pointcloud_to_laserscan,
+            cmd_vel_watchdog,
+            nav2,
+        ]),
+
+        TimerAction(period=13.0, actions=[
+            visualization,
+        ]),
     ])
