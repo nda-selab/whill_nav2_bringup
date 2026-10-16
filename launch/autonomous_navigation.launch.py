@@ -81,8 +81,9 @@ def generate_launch_description():
             ])
         ),
         launch_arguments={
-            'prior_map': LaunchConfiguration('prior_map'),
+            'prior_3d_map': LaunchConfiguration('prior_3d_map'),
             'localization_config': LaunchConfiguration('localization_config'),
+            'use_sim_time': LaunchConfiguration('use_sim_time'),
         }.items(),
     )
 
@@ -129,6 +130,8 @@ def generate_launch_description():
         ),
         launch_arguments={
             'params_file': LaunchConfiguration('nav2_params_file'),
+            'prior_2d_map': LaunchConfiguration('prior_2d_map'),
+            'use_sim_time': LaunchConfiguration('use_sim_time'),
         }.items(),
     )
 
@@ -211,8 +214,13 @@ def generate_launch_description():
         ),
 
         DeclareLaunchArgument(
-            'prior_map',
+            'prior_3d_map',
             description='Absolute path to prior 3D PCD',
+        ),
+
+        DeclareLaunchArgument(
+            'prior_2d_map',
+            description='Absolute path to 2D occupancy grid map YAML',
         ),
 
         DeclareLaunchArgument(
@@ -222,6 +230,12 @@ def generate_launch_description():
                 'config',
                 'localization.yaml',
             ]),
+        ),
+
+        DeclareLaunchArgument(
+            'use_sim_time',
+            default_value='false',
+            description='Use simulation clock',
         ),
 
         whill_driver,

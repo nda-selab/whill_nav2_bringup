@@ -9,12 +9,9 @@ from launch_ros.descriptions import ParameterValue
 
 def generate_launch_description():
     use_sim_time = LaunchConfiguration("use_sim_time")
-    map_yaml = LaunchConfiguration("map")
+    map_yaml = LaunchConfiguration("prior_2d_map")
     params_file = LaunchConfiguration("params_file")
 
-    default_map = PathJoinSubstitution([
-        FindPackageShare('whill_nav2_bringup'), 'maps', 'map.yaml',
-    ])
     default_params = PathJoinSubstitution([
         FindPackageShare('whill_nav2_bringup'), 'config', 'nav2_params.yaml',
     ])
@@ -63,9 +60,22 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        DeclareLaunchArgument('use_sim_time', default_value='false'),
-        DeclareLaunchArgument('map', default_value=default_map),
-        DeclareLaunchArgument('params_file', default_value=default_params),
+
+        DeclareLaunchArgument(
+            'use_sim_time',
+            default_value='false',
+            description='Use simulation clock',
+        ),
+
+        DeclareLaunchArgument(
+            'prior_2d_map',
+            description='Absolute path to 2D occupancy grid map YAML',
+        ),
+
+        DeclareLaunchArgument(
+            'params_file',
+            default_value=default_params
+        ),
 
         map_server,
         map_lifecycle,

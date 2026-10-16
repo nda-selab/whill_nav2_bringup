@@ -4,7 +4,7 @@ from launch.launch_description_sources import AnyLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
 from launch_ros.actions import Node
-
+from launch_ros.descriptions import ParameterValue
 
 def generate_launch_description():
 
@@ -22,6 +22,7 @@ def generate_launch_description():
         launch_arguments={
             'config_file': 'os2_64.yaml',
             'rviz': 'false',
+            'use_sim_time': LaunchConfiguration('use_sim_time'),
         }.items(),
     )
 
@@ -37,6 +38,10 @@ def generate_launch_description():
             'input_topic': '/Odometry',
             'output_topic': '/odom_nav',
             'base_frame': 'base_link',
+            'use_sim_time': ParameterValue(
+                LaunchConfiguration('use_sim_time'),
+                value_type=bool,
+            ),
         }],
     )
 
@@ -53,7 +58,7 @@ def generate_launch_description():
             ])
         ),
         launch_arguments={
-            'prior_map': LaunchConfiguration('prior_map'),
+            'prior_map': LaunchConfiguration('prior_3d_map'),
             'config': LaunchConfiguration('localization_config'),
             'use_sim_time': LaunchConfiguration('use_sim_time'),
         }.items(),
@@ -63,7 +68,12 @@ def generate_launch_description():
     # Launch
     # =========================================================
     return LaunchDescription([
-        DeclareLaunchArgument('prior_map', description='Absolute path to prior 3D PCD'),
+
+        DeclareLaunchArgument(
+            'prior_3d_map',
+            description='Absolute path to prior 3D PCD'
+        ),
+
         DeclareLaunchArgument(
             'localization_config',
             default_value=PathJoinSubstitution([
@@ -72,7 +82,12 @@ def generate_launch_description():
                 'localization.yaml',
             ]),
         ),
-        DeclareLaunchArgument('use_sim_time', default_value='false'),
+
+        DeclareLaunchArgument(
+            'use_sim_time',
+            default_value='false',
+            description='Use simulation clock',
+        ),
 
         fast_lio2,
         odom_to_base_link,
