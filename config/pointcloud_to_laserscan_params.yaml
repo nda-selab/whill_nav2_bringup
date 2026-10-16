@@ -1,0 +1,27 @@
+pointcloud_to_laserscan:
+  ros__parameters:
+    # 出力するLaserScanの座標系
+    target_frame: base_link
+
+    # TFの許容待機時間 [s]
+    transform_tolerance: 0.05
+
+    # 使用する点群の高さ範囲 [m]
+    min_height: 0.10
+    max_height: 1.50
+
+    # 角度範囲・分解能 [rad]
+    angle_min: -3.14159
+    angle_max: 3.14159
+    angle_increment: 0.0087
+
+    # スキャン周期 [s]
+    scan_time: 0.1
+
+    # 使用距離 [m]
+    range_min: 0.3
+    range_max: 30.0
+
+    # 無効距離の扱い
+    use_inf: true
+    inf_epsilon: 1.0

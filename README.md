@@ -172,19 +172,13 @@ ros2 launch whill_nav2_bringup autonomous_navigation.launch.py
 
 統合起動とは併用しない．
 
-1. Ouster
+1. Ouster OS2-64
 
 ```bash
-ros2 launch ouster_ros sensor.launch.xml \
-  sensor_hostname:=169.254.185.67 \
-  point_type:=original \
-  timestamp_mode:=TIME_FROM_ROS_TIME \
-  lidar_port:=7502 \
-  imu_port:=7503 \
-  viz:=false
+ros2 launch whill_nav2_bringup os2_64.launch.py
 ```
 
-2. URG
+2. Hokuyo URG
 
 ```bash
 ros2 launch whill_nav2_bringup urg.launch.py
@@ -211,7 +205,7 @@ ros2 launch whill_nav2_bringup static_tf.launch.py
 5. PointCloud to LaserScan
 
 ```bash
-ros2 launch whill_nav2_bringup points_to_scan.launch.py
+ros2 launch whill_nav2_bringup pointcloud_to_laserscan.launch.py
 ```
 
 6. Nav2, Map Server, AMCL

@@ -10,15 +10,19 @@ def generate_launch_description():
     # =========================================================
     # 1. PointCloud to LaserScan
     # =========================================================
-    points_to_scan = IncludeLaunchDescription(
+    pointcloud_to_laserscan = IncludeLaunchDescription(
         AnyLaunchDescriptionSource(
             PathJoinSubstitution([
                 FindPackageShare('whill_nav2_bringup'),
                 'launch',
                 'components',
-                'points_to_scan.launch.py',
+                'pointcloud_to_laserscan.launch.py',
             ])
-        )
+        ),
+        launch_arguments={
+            'pointcloud_to_laserscan_params_file':
+                LaunchConfiguration('pointcloud_to_laserscan_params_file'),
+        }.items(),
     )
 
     # =========================================================
@@ -53,6 +57,16 @@ def generate_launch_description():
     # Launch
     # =========================================================
     return LaunchDescription([
+
+        DeclareLaunchArgument(
+            'pointcloud_to_laserscan_params_file',
+            default_value=PathJoinSubstitution([
+                FindPackageShare('whill_nav2_bringup'),
+                'config',
+                'pointcloud_to_laserscan_params.yaml',
+            ]),
+            description='PointCloud to LaserScan parameter YAML file',
+        ),
         
         DeclareLaunchArgument(
             'nav2_params_file',
@@ -74,7 +88,7 @@ def generate_launch_description():
             description='CmdVel Watchdog parameter YAML file',
         ),
 
-        points_to_scan,
+        pointcloud_to_laserscan,
         cmd_vel_watchdog,
         nav2,
     ])

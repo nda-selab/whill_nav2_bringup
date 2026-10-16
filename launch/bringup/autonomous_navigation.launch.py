@@ -51,6 +51,7 @@ def generate_launch_description():
             ])
         ),
         launch_arguments={
+            'pointcloud_to_laserscan_params_file': LaunchConfiguration('pointcloud_to_laserscan_params_file'),
             'nav2_params_file': LaunchConfiguration('nav2_params_file'),
             'cmd_vel_watchdog_params_file': LaunchConfiguration('cmd_vel_watchdog_params_file'),
         }.items(),
@@ -96,6 +97,16 @@ def generate_launch_description():
                 'urg_params.yaml',
             ]),
             description='URG parameter YAML file',
+        ),
+
+        DeclareLaunchArgument(
+            'pointcloud_to_laserscan_params_file',
+            default_value=PathJoinSubstitution([
+                FindPackageShare('whill_nav2_bringup'),
+                'config',
+                'pointcloud_to_laserscan_params.yaml',
+            ]),
+            description='PointCloud to LaserScan parameter YAML file',
         ),
 
         DeclareLaunchArgument(
