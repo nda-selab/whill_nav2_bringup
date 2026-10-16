@@ -1,0 +1,40 @@
+submap_localizer:
+  ros__parameters:
+    use_sim_time: false
+    map_frame: map
+    odom_frame: odom
+    base_frame: base_link
+    cloud_topic: /cloud_registered
+    odom_topic: /odom_nav
+    initial_pose_topic: /initialpose
+    prior_map_path: ""  # Required. Set via launch argument prior_map.
+
+    # Both /cloud_registered and /odom_nav must use odom as their parent frame.
+    # /cloud_registered must contain transformed *current scans*, not a growing map.
+    submap_duration_sec: 5.0
+    max_scans: 60
+    scan_voxel_size: 0.25
+    submap_voxel_size: 0.30
+    prior_map_voxel_size: 0.30
+    min_scan_points: 30
+    min_submap_points: 200
+    min_target_points: 200
+
+    registration_frequency: 1.0
+    local_map_radius_xy: 20.0
+    local_map_half_height: 5.0
+    gicp_max_correspondence_distance: 1.5
+    gicp_max_iterations: 40
+    gicp_transformation_epsilon: 0.0001
+    gicp_euclidean_fitness_epsilon: 0.0001
+
+    # getFitnessScore() is a squared distance score, i.e. approximately m^2.
+    max_fitness_score: 0.25
+    overlap_distance: 0.60
+    min_overlap_ratio: 0.45
+    max_correction_translation: 0.60
+    max_correction_rotation_rad: 0.30
+    bootstrap_max_correction_translation: 2.0
+    bootstrap_max_correction_rotation_rad: 0.80
+    max_odom_age_sec: 1.0
+    max_alignment_age_sec: 5.0

@@ -15,10 +15,10 @@
 
   <!-- ROS 2 Messages and TF -->
   <exec_depend>rclpy</exec_depend>
-  <exec_depend>nav_msgs</exec_depend>
-  <exec_depend>geometry_msgs</exec_depend>
-  <exec_depend>sensor_msgs</exec_depend>
-  <exec_depend>tf2_ros</exec_depend>
+  <depend>nav_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>tf2_ros</depend>
 
   <!-- Python Libraries -->
   <exec_depend>python3-numpy</exec_depend>
@@ -28,6 +28,14 @@
   <exec_depend>fast_lio</exec_depend>
   <exec_depend>ouster_ros</exec_depend>
   <exec_depend>pointcloud_to_laserscan</exec_depend>
+
+  <!-- 3D Submap Localization -->
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>pcl_conversions</depend>
+  <build_depend>eigen3_cmake_module</build_depend>
+  <depend>eigen</depend>
+  <exec_depend>nav2_map_server</exec_depend>
 
   <!-- Navigation -->
   <exec_depend>nav2_bringup</exec_depend>

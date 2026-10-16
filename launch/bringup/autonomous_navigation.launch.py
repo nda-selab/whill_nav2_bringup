@@ -35,7 +35,11 @@ def generate_launch_description():
                 'components',
                 'localization.launch.py',
             ])
-        )
+        ),
+        launch_arguments={
+            'prior_map': LaunchConfiguration('prior_map'),
+            'localization_config': LaunchConfiguration('localization_config'),
+        }.items(),
     )
 
     # =========================================================
@@ -133,6 +137,20 @@ def generate_launch_description():
             'use_rviz',
             default_value='true',
             description='Launch RViz',
+        ),
+
+        DeclareLaunchArgument(
+            'prior_map',
+            description='Absolute path to prior 3D PCD',
+        ),
+
+        DeclareLaunchArgument(
+            'localization_config',
+            default_value=PathJoinSubstitution([
+                FindPackageShare('whill_nav2_bringup'),
+                'config',
+                'localization.yaml',
+            ]),
         ),
 
         hardware_bringup,

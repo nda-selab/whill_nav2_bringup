@@ -1082,7 +1082,7 @@ def main() -> int:
     
     if args.plan_preview or args.execute:
         print("Nav2がActive状態になるまで待機します...")
-        navigator.waitUntilNav2Active()
+        navigator.waitUntilNav2Active(localizer='map_server')
 
     preview_qos = QoSProfile(
         history=HistoryPolicy.KEEP_LAST,

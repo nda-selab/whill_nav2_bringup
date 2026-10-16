@@ -1,8 +1,7 @@
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import AnyLaunchDescriptionSource
-from launch.substitutions import PathJoinSubstitution
-
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
 from launch_ros.actions import Node
 
@@ -10,9 +9,9 @@ from launch_ros.actions import Node
 def generate_launch_description():
 
     # =========================================================
-    # FAST-LIO2
+    # 1. FAST-LIO2
     # =========================================================
-    fast_lio = IncludeLaunchDescription(
+    fast_lio2 = IncludeLaunchDescription(
         AnyLaunchDescriptionSource(
             PathJoinSubstitution([
                 FindPackageShare('fast_lio'),
@@ -27,7 +26,7 @@ def generate_launch_description():
     )
 
     # =========================================================
-    # odom -> base_link
+    # 2. odom -> base_link
     # =========================================================
     odom_to_base_link = Node(
         package='whill_nav2_bringup',
@@ -42,9 +41,40 @@ def generate_launch_description():
     )
 
     # =========================================================
+    # 3. Submap Localization
+    # =========================================================
+    submap_localization = IncludeLaunchDescription(
+        AnyLaunchDescriptionSource(
+            PathJoinSubstitution([
+                FindPackageShare('whill_nav2_bringup'),
+                'launch',
+                'components',
+                'submap_localization.launch.py',
+            ])
+        ),
+        launch_arguments={
+            'prior_map': LaunchConfiguration('prior_map'),
+            'config': LaunchConfiguration('localization_config'),
+            'use_sim_time': LaunchConfiguration('use_sim_time'),
+        }.items(),
+    )
+
+    # =========================================================
     # Launch
     # =========================================================
-    return LaunchDescription([        
-        fast_lio,
+    return LaunchDescription([
+        DeclareLaunchArgument('prior_map', description='Absolute path to prior 3D PCD'),
+        DeclareLaunchArgument(
+            'localization_config',
+            default_value=PathJoinSubstitution([
+                FindPackageShare('whill_nav2_bringup'),
+                'config',
+                'localization.yaml',
+            ]),
+        ),
+        DeclareLaunchArgument('use_sim_time', default_value='false'),
+
+        fast_lio2,
         odom_to_base_link,
+        submap_localization,
     ])
