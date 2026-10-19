@@ -4,8 +4,32 @@ from launch.launch_description_sources import AnyLaunchDescriptionSource
 from launch.substitutions import (LaunchConfiguration, PathJoinSubstitution)
 from launch_ros.substitutions import FindPackageShare
 from launch_ros.actions import Node
+from launch.conditions import IfCondition
+from launch_ros.descriptions import ParameterValue
 
 def generate_launch_description():
+
+    # =========================================================
+    # System Status Announcer
+    # =========================================================
+    system_status_announcer = Node(
+        package='whill_nav2_bringup',
+        executable='system_status_announcer.py',
+        name='system_status_announcer',
+        output='screen',
+        condition=IfCondition(
+            LaunchConfiguration('enable_voice_announcements')
+        ),
+        parameters=[
+            LaunchConfiguration('announcer_params_file'),
+            {
+                'use_sim_time': ParameterValue(
+                    LaunchConfiguration('use_sim_time'),
+                    value_type=bool,
+                ),
+            },
+        ],
+    )
 
     # =========================================================
     # WHILL Driver
@@ -158,6 +182,22 @@ def generate_launch_description():
     return LaunchDescription([
 
         DeclareLaunchArgument(
+            'enable_voice_announcements',
+            default_value='true',
+            description='Enable voice status announcements',
+        ),
+
+        DeclareLaunchArgument(
+            'announcer_params_file',
+            default_value=PathJoinSubstitution([
+                FindPackageShare('whill_nav2_bringup'),
+                'config',
+                'system_status_announcer.yaml',
+            ]),
+            description='System status announcer parameter file',
+        ),
+
+        DeclareLaunchArgument(
             'os2_64_params_file',
             default_value=PathJoinSubstitution([
                 FindPackageShare('whill_nav2_bringup'),
@@ -237,6 +277,8 @@ def generate_launch_description():
             default_value='false',
             description='Use simulation clock',
         ),
+
+        system_status_announcer,
 
         whill_driver,
         static_tf,

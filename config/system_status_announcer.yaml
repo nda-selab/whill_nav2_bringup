@@ -1,0 +1,12 @@
+system_status_announcer:
+  ros__parameters:
+    dictionary: /var/lib/mecab/dic/open-jtalk/naist-jdic
+    voice_file: /usr/share/hts-voice/nitech-jp-atr503-m001/nitech_jp_atr503_m001.htsvoice
+
+    speech_rate: 1.0
+
+    sensor_timeout_sec: 4.0
+    odom_timeout_sec: 3.0
+    localization_timeout_sec: 5.0
+    nav2_timeout_sec: 4.0
+    check_period_sec: 1.0

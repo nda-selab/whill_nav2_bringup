@@ -54,6 +54,9 @@
   <!-- WHILL Hardware and Control -->
   <exec_depend>whill_bringup</exec_depend>
   <exec_depend>urg_node2</exec_depend>
+
+  <!-- System Status Announcer -->
+  <exec_depend>whill_msgs</exec_depend>
   
   <export>
     <build_type>ament_cmake</build_type>

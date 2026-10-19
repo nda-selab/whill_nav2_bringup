@@ -16,6 +16,7 @@ install(PROGRAMS
   scripts/odom_to_base_link.py
   scripts/trajectory_waypoint_navigator.py
   scripts/twist_to_whill_joy.py
+  scripts/system_status_announcer.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
