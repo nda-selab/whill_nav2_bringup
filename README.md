@@ -25,12 +25,12 @@ PCD to OccupancyGrid Conversion
 ### Map-based Localization
 
 ```text
-Map Server
- └── /map
+Prior 3D Map（PCD、prior_3d_mapで指定）
         ↓
-AMCL
- ├── Input: /map
- ├── Input: /scan_ouster
+Submap Localizer
+ ├── Input: /cloud_registered
+ ├── Input: /odom_nav
+ ├── Input: /initialpose
  └── TF: map -> odom
 ```
 
@@ -59,7 +59,7 @@ Ouster LiDAR
 PointCloud to LaserScan
  └── /scan_ouster
         ↓
-AMCL, Local Costmap, Global Costmap
+Local Costmap, Global Costmap
 ```
 
 ```text
@@ -124,14 +124,6 @@ WHILL CmdVel Watchdogは、平滑化後の`/cmd_vel`を監視し、以下の制�
 Nav2の詳細な設定パラメータはconfig/nav2_params.yamlを参照する．
 
 ```yaml
-amcl:
-  ros__parameters:
-    global_frame_id: map
-    odom_frame_id: odom
-    base_frame_id: base_link
-    scan_topic: /scan_ouster
-    tf_broadcast: true
-
 bt_navigator:
   ros__parameters:
     global_frame: map
@@ -162,7 +154,9 @@ behavior_server:
 ### Integrated Bringup
 
 ```bash
-ros2 launch whill_nav2_bringup autonomous_navigation.launch.py
+ros2 launch whill_nav2_bringup autonomous_navigation.launch.py \
+  prior_3d_map:='/home/selab/data/selab/pointcloud_2016-02-12-01-30-04_replay_loop_closed.pcd' \
+  prior_2d_map:='/home/selab/data/selab/nav2_map_csf/map.yaml'
 ```
 
 起動後，RVizの「2D Pose Estimate」からロボットの初期位置・姿勢を設定する．
@@ -208,10 +202,11 @@ ros2 launch whill_nav2_bringup static_tf.launch.py
 ros2 launch whill_nav2_bringup pointcloud_to_laserscan.launch.py
 ```
 
-6. Nav2, Map Server, AMCL
+6. Nav2, Map Server
 
 ```bash
-ros2 launch whill_nav2_bringup whill_nav2.launch.py
+ros2 launch whill_nav2_bringup whill_nav2.launch.py \
+  prior_2d_map:='/home/selab/data/selab/nav2_map_csf/map.yaml'
 ```
 
 7. RViz

@@ -451,15 +451,21 @@ private:
     const Matrix correction = estimate * initial.inverse();
     // Compare robot positions, not the map origin: rotation about a distant map origin
     // can exaggerate the translation part of (estimate * inverse(initial)).
-    const double change_t = ((estimate * odom_base).block<3, 1>(0, 3) -
-      (initial * odom_base).block<3, 1>(0, 3)).norm();
+    const Eigen::Vector3f initial_position = (initial * odom_base).block<3, 1>(0, 3);
+    const Eigen::Vector3f estimated_position = (estimate * odom_base).block<3, 1>(0, 3);
+    const Eigen::Vector3f delta_position = estimated_position - initial_position;
+    const double change_t = delta_position.norm();
     const double change_r = rotationAngle(correction);
     const double limit_t = was_aligned ? max_correction_t_ : bootstrap_correction_t_;
     const double limit_r = was_aligned ? max_correction_r_ : bootstrap_correction_r_;
     std::ostringstream details;
     details << std::fixed << std::setprecision(3)
       << " fitness_m2=" << fitness << " overlap=" << overlap
+      << " mode=" << (was_aligned ? "tracking" : "bootstrap")
       << " delta_translation_m=" << change_t << " delta_rotation_rad=" << change_r
+      << " delta_x_m=" << delta_position.x()
+      << " delta_y_m=" << delta_position.y()
+      << " delta_z_m=" << delta_position.z()
       << " source_points=" << source->size() << " target_points=" << target->size();
     if (!std::isfinite(fitness) || fitness > max_fitness_ || overlap < min_overlap_ ||
       change_t > limit_t || change_r > limit_r)

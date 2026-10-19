@@ -37,4 +37,4 @@ submap_localizer:
     bootstrap_max_correction_translation: 2.0
     bootstrap_max_correction_rotation_rad: 0.80
     max_odom_age_sec: 1.0
-    max_alignment_age_sec: .0
+    max_alignment_age_sec: 5.0
