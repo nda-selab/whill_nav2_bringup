@@ -48,21 +48,21 @@ def generate_launch_description():
     # =========================================================
     # 3. Submap Localization
     # =========================================================
-    submap_localization = IncludeLaunchDescription(
-        AnyLaunchDescriptionSource(
-            PathJoinSubstitution([
-                FindPackageShare('whill_nav2_bringup'),
-                'launch',
-                'components',
-                'submap_localization.launch.py',
-            ])
-        ),
-        launch_arguments={
-            'prior_map': LaunchConfiguration('prior_3d_map'),
-            'config': LaunchConfiguration('localization_config'),
-            'use_sim_time': LaunchConfiguration('use_sim_time'),
-        }.items(),
-    )
+    #submap_localization = IncludeLaunchDescription(
+    #    AnyLaunchDescriptionSource(
+    #        PathJoinSubstitution([
+    #            FindPackageShare('whill_nav2_bringup'),
+    #            'launch',
+    #            'components',
+    #            'submap_localization.launch.py',
+    #        ])
+    #    ),
+    #    launch_arguments={
+    #        'prior_map': LaunchConfiguration('prior_3d_map'),
+    #        'config': LaunchConfiguration('localization_config'),
+    #        'use_sim_time': LaunchConfiguration('use_sim_time'),
+    #    }.items(),
+    #)
 
     # =========================================================
     # Launch
@@ -91,5 +91,5 @@ def generate_launch_description():
 
         fast_lio2,
         odom_to_base_link,
-        submap_localization,
+        #submap_localization,
     ])

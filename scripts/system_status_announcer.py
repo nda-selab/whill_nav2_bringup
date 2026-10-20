@@ -19,6 +19,7 @@ from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import LaserScan, PointCloud2
 from std_msgs.msg import String
 from whill_msgs.msg import ModelCr2State
+from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus
 
 
 NAV2_LIFECYCLE_NODES = (
@@ -296,8 +297,8 @@ class SystemStatusAnnouncer(Node):
                 qos_profile_sensor_data,
             ),
             self.create_subscription(
-                String,
-                '/localization/status',
+                DiagnosticArray,
+                '/alignment_status',
                 self.on_localization_status,
                 10,
             ),
@@ -368,19 +369,36 @@ class SystemStatusAnnouncer(Node):
     # -----------------------------------------------------
 
     def on_localization_status(self, msg):
-        status = msg.data.strip()
+        for status in msg.status:
+            if status.name != 'lidar_localization_ros2/alignment':
+                continue
 
-        self.last_status = status
-        self.last_status_time = time.monotonic()
+            now = time.monotonic()
+            values = {item.key: item.value for item in status.values}
+            self.last_status_time = now
 
-        if status.startswith('ACCEPT'):
-            self.last_accept = time.monotonic()
+            if values.get('map_received') == 'false':
+                self.last_status = 'WAIT_MAP'
+                self.last_accept = None
 
-        elif (
-            status == 'INITIALPOSE_ACCEPTED_WAIT_REGISTRATION'
-            or status.startswith('WAIT_INITIALPOSE')
-        ):
-            self.last_accept = None
+            elif values.get('initialpose_received') == 'false':
+                self.last_status = 'WAIT_INITIALPOSE'
+                self.last_accept = None
+
+            elif (
+                status.level == DiagnosticStatus.OK
+                and status.message == 'ok'
+                and values.get('has_converged') == 'true'
+            ):
+                self.last_status = 'ACCEPT'
+                self.last_accept = now
+
+            else:
+                self.last_status = status.message
+                # 失敗時は成功時刻を更新しない。
+                # 既存のタイムアウト判定で喪失を通知する。
+
+            break
 
     # -----------------------------------------------------
     # Nav2 lifecycle
