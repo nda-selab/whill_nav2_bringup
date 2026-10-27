@@ -110,7 +110,7 @@ local_costmap:
         min_obstacle_height: -2.0
         max_obstacle_height: 2.0
 
-        observation_sources: ouster_scan urg_scan
+        observation_sources: ouster_scan urg_front urg_left urg_right
         ouster_scan:
           topic: /scan_ouster
           data_type: "LaserScan"
@@ -124,8 +124,8 @@ local_costmap:
           max_obstacle_height: 2.0
           min_obstacle_height: -2.0
 
-        urg_scan:
-          topic: /scan_urg
+        urg_front:
+          topic: /urg_front/scan
           data_type: "LaserScan"
           marking: true
           clearing: true
@@ -136,6 +136,32 @@ local_costmap:
           raytrace_max_range: 4.0
           min_obstacle_height: -2.0
           max_obstacle_height: 2.0
+
+        urg_left:
+          topic: /urg_left/scan
+          data_type: "LaserScan"
+          marking: true
+          clearing: false
+          inf_is_valid: true
+          obstacle_min_range: 0.05
+          obstacle_max_range: 4.0
+          raytrace_min_range: 0.05
+          raytrace_max_range: 4.0
+          min_obstacle_height: 0.10
+          max_obstacle_height: 1.50
+
+        urg_right:
+          topic: /urg_right/scan
+          data_type: "LaserScan"
+          marking: true
+          clearing: false
+          inf_is_valid: true
+          obstacle_min_range: 0.05
+          obstacle_max_range: 4.0
+          raytrace_min_range: 0.05
+          raytrace_max_range: 4.0
+          min_obstacle_height: 0.10
+          max_obstacle_height: 1.50
 
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
