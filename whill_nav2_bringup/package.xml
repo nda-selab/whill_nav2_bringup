@@ -68,6 +68,8 @@
   <exec_depend>diagnostic_msgs</exec_depend>
 
   <exec_depend>sensor_msgs_py</exec_depend>
+
+  <exec_depend>imu_filter_madgwick</exec_depend>
   
   <export>
     <build_type>ament_cmake</build_type>

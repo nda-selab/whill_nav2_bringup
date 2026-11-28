@@ -6,7 +6,8 @@ import time
 import rclpy
 from rclpy.node import Node
 from rclpy.executors import ExternalShutdownException
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.clock import Clock, ClockType
+from rclpy.qos import QoSProfile, ReliabilityPolicy
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 from nav_msgs.msg import Odometry
 from whill_msgs.msg import ModelCr2State
@@ -25,8 +26,9 @@ class WheelOdometryNode(Node):
             'left_scale': 1.0, 'right_scale': 1.0,
             'axle_to_base_x': 0.0, 'axle_to_base_y': 0.0,
             'wheel_speed_std': 0.03, 'lateral_speed_std': 0.05,
-            'max_wheel_speed': 2.0, 'max_dt': 0.65, 'input_timeout': 0.75,
-            'diagnostic_rate': 5.0, 'calibration_confirmed': False,
+            'constrain_vertical_velocity': False, 'vertical_speed_std': 0.10,
+            'max_wheel_speed': 2.0, 'max_dt': 0.15, 'input_timeout': 0.20,
+            'diagnostic_rate': 10.0, 'calibration_confirmed': False,
         }
         for name, default in defaults.items():
             self.declare_parameter(name, default)
@@ -42,17 +44,28 @@ class WheelOdometryNode(Node):
                 or self.odom_frame.startswith('/') or self.base_frame.startswith('/')):
             raise ValueError('Frame IDs must be distinct, nonempty and have no leading slash')
         self.calibration_confirmed = p['calibration_confirmed']
+        self.constrain_vertical_velocity = p['constrain_vertical_velocity']
+        self.vertical_speed_std = p['vertical_speed_std']
+        if not math.isfinite(self.vertical_speed_std) or self.vertical_speed_std <= 0.0:
+            raise ValueError('vertical_speed_std must be finite and positive')
+        if self.constrain_vertical_velocity and (abs(self.model.axle_to_base_x) > 1e-6
+                                               or abs(self.model.axle_to_base_y) > 1e-6):
+            raise ValueError('Zero vertical velocity requires the base origin at the axle in XY')
         self.last_received = None
         self.last_stamp_ns = None
         self.previous_wheels = None
         self.last_valid = None
         self.last_raw = None
+        self.last_sample_stamp_ns = None
         self.reason = 'waiting for WHILL feedback'
         self.odom_pub = self.create_publisher(Odometry, p['output_topic'], 10)
         self.diag_pub = self.create_publisher(DiagnosticArray, p['diagnostics_topic'], 10)
         self.subscription = self.create_subscription(
-            ModelCr2State, p['input_topic'], self.on_state, qos_profile_sensor_data)
-        self.timer = self.create_timer(1.0 / p['diagnostic_rate'], self.publish_diagnostics)
+            ModelCr2State, p['input_topic'], self.on_state,
+            QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT))
+        self.steady_clock = Clock(clock_type=ClockType.STEADY_TIME)
+        self.timer = self.create_timer(1.0 / p['diagnostic_rate'],
+                                       self.publish_diagnostics, clock=self.steady_clock)
         if not self.calibration_confirmed:
             self.get_logger().warn('Calibration unconfirmed: odometry publication disabled. '
                                    'Verify wheel signs, scale and base geometry before enabling.')
@@ -70,6 +83,10 @@ class WheelOdometryNode(Node):
         self.last_valid = None
         self.reason = reason
 
+    def reject(self, reason):
+        self.invalidate(reason)
+        self.publish_diagnostics()
+
     def on_state(self, msg):
         received = time.monotonic()
         previous_received = self.last_received
@@ -77,28 +94,33 @@ class WheelOdometryNode(Node):
         stamp = self.get_clock().now()
         self.last_raw = (msg.left_motor_speed, msg.right_motor_speed, msg.power_on, msg.error)
         if not self.calibration_confirmed:
-            self.invalidate('calibration not confirmed')
+            self.reject('calibration not confirmed')
             return
         if msg.error != 0 or msg.power_on != 1:
-            self.invalidate(f'WHILL power/error: {msg.power_on}/{msg.error}')
+            self.reject(f'WHILL power/error: {msg.power_on}/{msg.error}')
             return
         try:
             wheels = self.model.wheel_speeds(msg.left_motor_speed, msg.right_motor_speed)
         except ValueError as exc:
-            self.invalidate(str(exc))
+            self.reject(str(exc))
             return
         if stamp.nanoseconds <= 0:
-            self.invalidate('ROS clock not initialized')
+            self.reject('ROS clock not initialized')
             return
+        if self.last_sample_stamp_ns is not None and stamp.nanoseconds <= self.last_sample_stamp_ns:
+            self.reject('ROS timestamp did not advance; restart after clock reset')
+            return
+        self.last_sample_stamp_ns = stamp.nanoseconds
         if previous_received is not None and received - previous_received > self.input_timeout:
             self.invalidate('WHILL feedback gap')
+            self.publish_diagnostics()
         if self.last_stamp_ns is None:
             self.last_stamp_ns, self.previous_wheels = stamp.nanoseconds, wheels
             self.reason = 'waiting for second consecutive valid sample'
             return
         dt = (stamp.nanoseconds - self.last_stamp_ns) * 1e-9
         if not 0.0 < dt <= self.max_dt:
-            self.invalidate(f'Invalid integration interval: {dt:.3f}s')
+            self.reject(f'Invalid integration interval: {dt:.3f}s')
             return
         # Trapezoidal velocity integration; no extrapolation over missing samples.
         left, right = ((a+b)/2.0 for a, b in zip(self.previous_wheels, wheels))
@@ -116,7 +138,11 @@ class WheelOdometryNode(Node):
         odom.pose.covariance = covariance6(self.estimator.pose_covariance())
         odom.twist.twist.linear.x, odom.twist.twist.linear.y = vx, vy
         odom.twist.twist.angular.z = wz
-        odom.twist.covariance = covariance6(self.model.twist_covariance())
+        twist_cov = covariance6(self.model.twist_covariance())
+        # Optional nonholonomic pseudo-measurement in the BODY frame, not world Z.
+        if self.constrain_vertical_velocity:
+            twist_cov[14] = self.vertical_speed_std**2
+        odom.twist.covariance = twist_cov
         self.odom_pub.publish(odom)
         self.last_valid = received
         self.reason = 'ok' if self.estimator.pose_valid else 'twist valid; integrated pose lost across a gap'
@@ -142,6 +168,7 @@ class WheelOdometryNode(Node):
             status.level = DiagnosticStatus.OK if self.estimator.pose_valid else DiagnosticStatus.WARN
             status.message = self.reason
         values = {'input_age_sec': age, 'valid_age_sec': valid_age,
+                  'input_timeout_sec': self.input_timeout,
                   'calibration_confirmed': self.calibration_confirmed,
                   'pose_valid': self.estimator.pose_valid,
                   'twist_valid': valid_age <= self.input_timeout and age <= self.input_timeout}

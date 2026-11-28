@@ -35,6 +35,7 @@ ros2 run nav2_waypoint_tools waypoint_route_runner.py \
 
 ## 属性付き経路による走行
 
+SLAMベース
 ```bash
 ros2 run nav2_waypoint_tools waypoint_route_runner.py \
   --route "/path/to/waypoints.yaml" \
@@ -42,6 +43,21 @@ ros2 run nav2_waypoint_tools waypoint_route_runner.py \
   --nav2-params "$(ros2 pkg prefix --share whill_nav2_bringup)/config/nav2_params.yaml" \
   --execute \
   --route-control \
+  --localization-mode slam \
+  --initial-speed-limit 0.25 \
+  --control-point-tolerance 0.25
+```
+
+EKFベース
+```bash
+ros2 run nav2_waypoint_tools waypoint_route_runner.py \
+  --route "/path/to/waypoints.yaml" \
+  --map-yaml "/path/to/map.yaml" \
+  --nav2-params "$(ros2 pkg prefix --share whill_nav2_bringup)/config/nav2_params.yaml" \
+  --execute \
+  --route-control \
+  --localization-mode ekf \
+  --ekf-3d
   --initial-speed-limit 0.25 \
   --control-point-tolerance 0.25
 ```

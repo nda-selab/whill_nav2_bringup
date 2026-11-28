@@ -27,7 +27,7 @@ from waypoint_route_core import load_route, route_heading, filter_unsafe_route
 from route_watchdog_client import WatchdogClient
 from route_health_monitor import (
     LocalizationHealthGate, RobotMotionMonitor, RouteHealthGate,
-    UrgHealthGate, require_healthy,
+    UrgHealthGate, require_healthy, localization_input_gates,
 )
 
 from nav2_msgs.msg import SpeedLimit
@@ -320,6 +320,8 @@ def parse_args():
     parser.add_argument('--max-retries', type=int, default=1, help='Additional attempts for optional goals')
     parser.add_argument('--yaw-tolerance-deg', type=float, default=15.0, help='Required terminal yaw tolerance [deg]')
     parser.add_argument('--results-file', type=Path, help='Execution result log YAML')
+    parser.add_argument('--localization-mode', choices=['slam', 'ekf'], default='slam', help='Localization method used by bringup')
+    parser.add_argument('--ekf-3d', action='store_true', help='Require filtered IMU orientation for 3-D EKF')
     args = parser.parse_args()
     if args.max_goal_time <= 0 or not math.isfinite(args.max_goal_time) or args.max_retries < 0 or args.max_retries > 5:
         parser.error('Invalid goal timeout or retry count')
@@ -337,7 +339,11 @@ def parse_args():
     if (not math.isfinite(args.control_point_tolerance)
             or args.control_point_tolerance <= 0.0):
         parser.error('Invalid control point tolerance')
-    return args
+    if args.ekf_3d and args.localization_mode != 'ekf':
+        parser.error('--ekf-3d requires --localization-mode ekf')
+    if args.execute and args.localization_mode == 'ekf' and not args.route_control:
+        parser.error('EKF navigation requires --route-control')
+        return args
 
 
 def main():
@@ -447,6 +453,15 @@ def main():
             motion = RobotMotionMonitor(nav)
             gate = RouteHealthGate(
                 gate, localization_gate, motion, watchdog,
+            )
+            input_gates = localization_input_gates(
+                nav,
+                args.localization_mode,
+                require_filtered_imu=args.ekf_3d,
+            )
+            gate = RouteHealthGate(
+                gate, localization_gate, motion, watchdog,
+                extra_gates=input_gates,
             )
             speed_publisher = RouteSpeedPublisher(
                 nav, args.initial_speed_limit,

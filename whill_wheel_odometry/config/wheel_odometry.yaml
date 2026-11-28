@@ -19,7 +19,10 @@ wheel_odometry:
 
     wheel_speed_std: 0.03              # m/s, provisional
     lateral_speed_std: 0.05            # m/s, provisional
+    constrain_vertical_velocity: false
+    vertical_speed_std: 0.10
+
     max_wheel_speed: 2.0               # m/s, plausibility threshold, not a motion limit
     max_dt: 0.65                       # s; accommodates nominal 400ms initially
-    input_timeout: 0.75                # s; tighten after verifying 20Hz input
-    diagnostic_rate: 5.0              # Hz
+    input_timeout: 0.20                # s; tighten after verifying 20Hz input
+    diagnostic_rate: 10.0              # Hz

@@ -23,6 +23,29 @@ def generate_launch_description():
         }.items(),
     )
 
+    # IMU orientation estimation
+    imu_filter = Node(
+        package='imu_filter_madgwick',
+        executable='imu_filter_madgwick_node',
+        name='imu_filter',
+        output='screen',
+        parameters=[{
+            'use_sim_time': ParameterValue(
+                LaunchConfiguration('use_sim_time'),
+                value_type=bool,
+            ),
+            'use_mag': False,
+            'publish_tf': False,
+            'world_frame': 'enu',
+            'orientation_stddev': 0.05,
+        }],
+        remappings=[
+            ('imu/data_raw', '/ouster/imu'),
+            ('imu/data', '/imu/data'),
+        ],
+    )
+
+    # EKF
     ekf = Node(
         package='robot_localization',
         executable='ekf_node',
@@ -58,10 +81,12 @@ def generate_launch_description():
             default_value=PathJoinSubstitution([
                 FindPackageShare('whill_nav2_bringup'),
                 'config',
-                'ekf_params.yaml',
+                'ekf',
+                'ekf_3d_params.yaml',
             ]),
         ),
 
         wheel_odometry,
+        imu_filter,
         ekf,
     ])
