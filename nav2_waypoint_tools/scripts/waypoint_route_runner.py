@@ -343,7 +343,7 @@ def parse_args():
         parser.error('--ekf-3d requires --localization-mode ekf')
     if args.execute and args.localization_mode == 'ekf' and not args.route_control:
         parser.error('EKF navigation requires --route-control')
-        return args
+    return args
 
 
 def main():
@@ -451,9 +451,6 @@ def main():
             watchdog.start()
             localization_gate = LocalizationHealthGate(nav)
             motion = RobotMotionMonitor(nav)
-            gate = RouteHealthGate(
-                gate, localization_gate, motion, watchdog,
-            )
             input_gates = localization_input_gates(
                 nav,
                 args.localization_mode,

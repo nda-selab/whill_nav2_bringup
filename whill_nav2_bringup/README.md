@@ -57,7 +57,7 @@ ros2 run nav2_waypoint_tools waypoint_route_runner.py \
   --execute \
   --route-control \
   --localization-mode ekf \
-  --ekf-3d
+  --ekf-3d \
   --initial-speed-limit 0.25 \
   --control-point-tolerance 0.25
 ```
